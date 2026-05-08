@@ -4,7 +4,8 @@
       "Bash(npx tsc *)",
       "Bash(npm run *)",
       "mcp__cavalry__cavalry_ping",
-      "mcp__cavalry__cavalry_run_script"
+      "mcp__cavalry__cavalry_run_script",
+      "Bash(npx vitest *)"
     ]
   }
 }

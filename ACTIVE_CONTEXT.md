@@ -165,7 +165,17 @@ The primary reason for the Stallion v0.7 refactor.
 - README's "Available tools" table is entirely out of date
 - The "Example conversation" flow in README is impossible with the current 2-tool implementation
 
-### 6. No Layer ID Persistence
+### 6. Cavalry Node Type Runtime Rejection (Observed State)
+
+- Cavalry runtime rejected node type: `basicText`
+- Error: `"Could not create a node of type: basicText"`
+- Error: `"Type does not exist: basicText"`
+- This confirms a mismatch between the assumed node type vocabulary and the actual Cavalry runtime registry
+- Current node type mapping in documentation is NOT fully validated against runtime behavior
+
+> "System node type ontology is partially unverified against Cavalry runtime. All node type assumptions are considered speculative until confirmed via direct runtime validation."
+
+### 7. No Layer ID Persistence
 
 - Every `cavalry_run_script` call is a standalone stateless execution
 - Layer IDs created in one script call are not automatically passed to the next
@@ -218,7 +228,8 @@ The primary reason for the Stallion v0.7 refactor.
 - `existingLayerByName` target kind is explicitly unsupported in v1 generator (requires unverified scene-query API)
 - **VERIFIED 2026-05-08:** Compiler output manually executed via `cavalry_run_script` produced correct bouncing animation (`bounce_in` preset)
 - **Known preset bug fixed 2026-05-08:** `bounce_in` preset was applying `BounceOut` easing to `endFrame` — Cavalry applies easing from the keyframe it is set on going forward, so easing must be on `startFrame`. Fixed in `presets/bounceIn.ts`.
-- **Identity system implemented 2026-05-08:** `compilerOwned` target kind and `SceneIdentityResolver` added; full reconciliation verified in live Cavalry. See Section J for details.
+- **Identity system v1 implemented 2026-05-08:** `compilerOwned` target kind and `SceneIdentityResolver` added; full reconciliation verified in live Cavalry.
+- **Identity system v2 implemented 2026-05-08:** Hybrid `userData.mcId` primary + name fallback resolution added; `CompilerIdentity` type and `mcIdGenerator` introduced; `userData.mcId` persisted on layer creation for rename-safe identity. See Section J for details.
 
 ### Deterministic Layer Identity System v1 (implemented 2026-05-08)
 
@@ -313,9 +324,9 @@ When the system "works":
 | Fragile multi-step state     | Medium   | Layer IDs from step 1 must be manually threaded into step 2+ in a single script                                         |
 | JS injection surface         | Low      | Safety validation is pattern-matching only; does not prevent Cavalry API misuse                                         |
 | Easing type knowledge        | Medium   | BounceOut, ElasticIn, etc. must be spelled exactly right; no validation; silent failure                                 |
-| Identity via display name    | Medium   | `MC__` identity depends on `api.getNiceName` — user manually renaming a layer breaks reconciliation silently            |
-| MC_DUPLICATE halts execution | Medium   | If two layers share the same `MC__` name, the reconciliation `throw` stops the entire script; subsequent ops do not run |
-| No fallback identity         | Medium   | No UUID or `setUserData` backup exists; if `api.getNiceName` is unavailable, the identity system has no alternative     |
+| Identity via display name    | Low *(v2)* | v1: `MC__` identity depended on `api.getNiceName`; v2 adds `userData.mcId` primary match — renaming a layer no longer breaks identity when `identity` field is present in the DSL |
+| MC_DUPLICATE halts execution | Medium   | If two layers share the same mcId or `MC__` name, the reconciliation `throw` stops the entire script; subsequent ops do not run |
+| No fallback identity         | Resolved *(v2)* | v2 persists mcId into `userData.mcId` via `api.set` after creation; name-based matching is retained as secondary fallback |
 
 ---
 
@@ -378,9 +389,9 @@ When the system "works":
 
 ---
 
-## J. Deterministic Layer Identity System (v1)
+## J. Deterministic Layer Identity System (v1 + v2)
 
-> Implemented 2026-05-08. Lives in `src/compiler/`. Not connected to MCP tool surface.
+> v1 implemented 2026-05-08. v2 (hybrid mcId identity) implemented 2026-05-08. Lives in `src/compiler/`. Not connected to MCP tool surface.
 
 ### What it is
 
@@ -445,7 +456,7 @@ Zero duplicate layers per identity key per execution. If the script runs 100 tim
 | `api.getNiceName` behavior is consistent across Cavalry versions | UNVERIFIED — tested only on the version present during development |
 | `api.getNiceName` behavior on composition nodes (`compNode#N`)   | UNVERIFIED — no explicit test; observed no crash                   |
 
-### Limitations and risks
+### Limitations and risks (v1)
 
 | Risk                        | Description                                                                                                                                                 |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -454,6 +465,61 @@ Zero duplicate layers per identity key per execution. If the script runs 100 tim
 | Throw halts full script     | The `MC_DUPLICATE` hard error stops the entire script — all animation ops after the failing target do not execute                                           |
 | No fallback identity        | There is no UUID-based or `setUserData`-based backup. If `api.getNiceName` is unavailable, the system has no alternative                                    |
 | Compiler not on MCP surface | The identity system only runs when compiler output is manually passed to `cavalry_run_script`; it is not invoked automatically                              |
+
+---
+
+### Implementation Status (Runtime-Verified) — v2 Identity Layer
+
+> Implemented 2026-05-08 on branch `motion-runtime`.
+> Purely additive. All v1 behavior preserved unchanged.
+
+#### Implemented Files
+
+| File | Change |
+| ---- | ------ |
+| `src/compiler/motionDSL.ts` | Added `CompilerIdentity` type `{ mcId: string; name: string }`; extended `compilerOwned` `MotionTarget` with optional `identity?: CompilerIdentity` field; fully backward compatible |
+| `src/compiler/mcIdGenerator.ts` | **New.** Exports `generateMcId(layerType: string): string`; format `MC_<type>_<base36-timestamp>_<base36-random>`; no external dependencies |
+| `src/compiler/sceneIdentityResolver.ts` | Implements hybrid resolution: primary match via `userData.mcId`; name fallback only when mcId match fails; persists mcId on creation via `api.set(layerId, { "userData.mcId": mcId })`; v1 name-only path preserved when `identity` is absent |
+| `src/compiler/cavalryGenerator.ts` | **No structural changes.** Delegates identity handling entirely to `sceneIdentityResolver` layer |
+
+#### Verified Identity Flow
+
+**Generation:**
+- `generateMcId(layerType)` creates a stable mcId at DSL authoring time
+- mcId is stored in `MotionTarget.identity` (optional field in the serialized program)
+
+**First execution (Run 1):**
+- No layer with that mcId exists in scene userData
+- `api.get(layerId, "userData.mcId")` primary loop finds no match
+- Name fallback loop runs; finds layer by `api.getNiceName` if it was previously created without mcId
+- If no match in either loop → `api.create(layerType, "MC__<compilerLayerId>")` runs
+- Immediately after: `api.set(newId, { "userData.mcId": mcId })` persists the mcId into Cavalry
+
+**Subsequent executions (Run N):**
+- `api.get(layerId, "userData.mcId")` primary loop matches the stored mcId
+- Layer is reused deterministically
+- Name fallback loop does NOT execute (guarded by `if (hits.length === 0)`)
+- No duplicate layers created
+
+**Rename scenario:**
+- User changes display name inside Cavalry
+- `api.get(layerId, "userData.mcId")` still returns the stored mcId unchanged
+- Primary match succeeds; identity is intact
+- Name-based fallback is never reached
+
+#### Critical Safety Rule
+
+> **Strict fallback isolation rule: if any mcId-based matches exist in the scene, name-based fallback matching MUST NOT be used for reconciliation within that identity domain.**
+
+This is enforced structurally in the emitted JS: the name fallback loop is inside `if (__t0_hits.length === 0)` — it can only execute when the primary loop returned zero matches.
+
+#### Guarantees (as implemented)
+
+- Rename-safe identity persistence via `userData.mcId`
+- Duplicate-safe reconciliation behavior
+- Deterministic layer reuse across runs
+- Backward compatibility: programs without `identity` use v1 name-only path unchanged
+- No MCP runtime modifications required — `cavalry_ping` and `cavalry_run_script` unchanged
 
 ---
 
@@ -473,4 +539,4 @@ Before that layer can be designed, the `api.log()` return pipe problem must also
 
 ---
 
-_Last updated: 2026-05-08 (identity system implementation + audit) | Branch: motion-runtime | Commit: 9fc1d9a_
+_Last updated: 2026-05-08 (v2 hybrid identity layer) | Branch: motion-runtime_

@@ -81,6 +81,22 @@ export function compilerLayerName(compilerLayerId: string): string {
 }
 
 /**
+ * Stable identity record for compiler-owned layers (v2 identity system).
+ *
+ * `mcId` is a persistent identifier stored in the layer's `userData.mcId`
+ * field inside Cavalry. It survives display-name renames, making reconciliation
+ * robust against user edits.
+ *
+ * `name` mirrors the expected display name at the time identity was assigned.
+ * It is informational — the generator derives the canonical display name from
+ * `compilerLayerId` via `compilerLayerName()`.
+ */
+export type CompilerIdentity = {
+  mcId: string;
+  name: string;
+};
+
+/**
  * Reference to a layer in the Cavalry scene.
  *
  * Verified target kinds (2026-05-08):
@@ -89,6 +105,10 @@ export function compilerLayerName(compilerLayerId: string): string {
  *
  * `existingLayerByName` is reserved in the DSL surface but rejected by the
  * generator — no verified scene-query mechanism exists for it.
+ *
+ * v2 identity: when `identity` is present on a `compilerOwned` target, the
+ * resolver uses hybrid matching (mcId primary, display-name fallback) instead
+ * of name-only matching. Omitting `identity` preserves v1 behaviour.
  */
 export type MotionTarget =
   | { kind: "existingLayerById"; id: string }
@@ -99,6 +119,12 @@ export type MotionTarget =
       compilerLayerId: string;
       /** Cavalry layer type passed to api.create (e.g. "textShape", "basicShape"). */
       layerType: string;
+      /**
+       * Optional stable identity (v2). When present, reconciliation uses
+       * `userData.mcId` as the primary match key so renames do not break identity.
+       * When absent, v1 name-only matching is used (backward compat).
+       */
+      identity?: CompilerIdentity;
     };
 
 // ---------------------------------------------------------------------------
