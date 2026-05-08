@@ -209,14 +209,16 @@ The primary reason for the Stallion v0.7 refactor.
 
 **Status: EXISTS, pipeline VERIFIED offline, NOT connected to MCP runtime.**
 
-- Files: `motionDSL.ts`, `motionCompiler.ts`, `cavalryGenerator.ts`, `intentParser.ts`, `validators.ts`, `presets/`
+- Files: `motionDSL.ts`, `motionCompiler.ts`, `cavalryGenerator.ts`, `intentParser.ts`, `validators.ts`, `presets/`, `sceneIdentityResolver.ts`
 - The compiler pipeline (`MotionProgram → CompiledPlan → Cavalry JS string`) is fully implemented as a pure TypeScript module
+- **The compiler now contains the first deterministic reconciliation layer** — the `compilerOwned` target kind and `SceneIdentityResolver` (see Section J)
 - It is NOT imported by `src/index.ts` — it has zero influence on the live MCP execution path
+- **Runtime MCP tools are unchanged** — `cavalry_ping` and `cavalry_run_script` remain the only two exposed tools
 - `cavalry_run_script` remains the ONLY active execution path
-- The generator (`cavalryGenerator.ts`) deliberately emits only `api.set`, `api.keyframe`, `api.magicEasing` — it does NOT emit `api.create` or any `api.log()`-dependent call
 - `existingLayerByName` target kind is explicitly unsupported in v1 generator (requires unverified scene-query API)
 - **VERIFIED 2026-05-08:** Compiler output manually executed via `cavalry_run_script` produced correct bouncing animation (`bounce_in` preset)
 - **Known preset bug fixed 2026-05-08:** `bounce_in` preset was applying `BounceOut` easing to `endFrame` — Cavalry applies easing from the keyframe it is set on going forward, so easing must be on `startFrame`. Fixed in `presets/bounceIn.ts`.
+- **Identity system implemented 2026-05-08:** `compilerOwned` target kind and `SceneIdentityResolver` added; full reconciliation verified in live Cavalry. See Section J for details.
 
 ### Deterministic Layer Identity System v1 (implemented 2026-05-08)
 
@@ -306,6 +308,9 @@ When the system "works":
 | Fragile multi-step state | Medium | Layer IDs from step 1 must be manually threaded into step 2+ in a single script |
 | JS injection surface | Low | Safety validation is pattern-matching only; does not prevent Cavalry API misuse |
 | Easing type knowledge | Medium | BounceOut, ElasticIn, etc. must be spelled exactly right; no validation; silent failure |
+| Identity via display name | Medium | `MC__` identity depends on `api.getNiceName` — user manually renaming a layer breaks reconciliation silently |
+| MC_DUPLICATE halts execution | Medium | If two layers share the same `MC__` name, the reconciliation `throw` stops the entire script; subsequent ops do not run |
+| No fallback identity | Medium | No UUID or `setUserData` backup exists; if `api.getNiceName` is unavailable, the identity system has no alternative |
 
 ---
 
@@ -368,6 +373,80 @@ When the system "works":
 
 ---
 
+## J. Deterministic Layer Identity System (v1)
+
+> Implemented 2026-05-08. Lives in `src/compiler/`. Not connected to MCP tool surface.
+
+### What it is
+
+A stateless, compiler-owned reconciliation layer that gives each logical animation target a stable identity across repeated script executions — without persistent storage, memory, or runtime state.
+
+### compilerOwned target type
+
+A new DSL concept added to `MotionTarget` in `motionDSL.ts`:
+
+```typescript
+{ kind: "compilerOwned"; compilerLayerId: string; layerType: string }
+```
+
+- `compilerLayerId` — unique identifier assigned by the compiler (e.g. `"title_text"`)
+- `layerType` — Cavalry layer type passed to `api.create` (e.g. `"textShape"`)
+- The display name in Cavalry is always `MC__<compilerLayerId>` (reserved namespace)
+
+### Reconciliation algorithm
+
+Generated JS emitted by `cavalryGenerator.ts` for each `compilerOwned` target:
+
+1. Call `api.getAllSceneLayers()` to enumerate all layers in the current scene
+2. For each layer ID, call `api.getNiceName(id)` and compare against `"MC__<compilerLayerId>"`
+3. Collect all matches into a list
+
+Decision:
+- **0 matches** → `api.create(layerType, "MC__<compilerLayerId>")` — layer is new, create it
+- **1 match** → use the existing internal ID — layer is known, mutate in place
+- **2+ matches** → `throw new Error("MC_DUPLICATE:...")` — hard error, execution halts, no recovery
+
+### Guarantee
+
+Zero duplicate layers per identity key per execution. If the script runs 100 times, exactly one `MC__<id>` layer exists in the scene.
+
+### System properties
+
+- **Fully stateless** — no database, no memory store, no external persistence
+- **Deterministic** — same `compilerLayerId` always resolves to the same logical layer
+- **Multi-agent safe** — behavior is reproducible regardless of which agent executes the script
+- **Transport-agnostic** — works over any MCP-compatible transport
+- **Depends only on Cavalry runtime APIs** — `api.getAllSceneLayers()` + `api.getNiceName()`
+
+### Verified assumptions (confirmed via live execution 2026-05-08)
+
+| Assumption | Verification |
+|------------|-------------|
+| `api.getAllSceneLayers()` returns usable layer identifiers | VERIFIED — same format as `api.create` return value |
+| `api.getNiceName(internalId)` returns the display name from `api.create` | VERIFIED — returns exact string passed as second arg |
+| `api.create` + `api.getNiceName` pairing supports reconciliation | VERIFIED — two consecutive executions produced exactly one layer; second run reused existing |
+| Reconciliation result is idempotent | VERIFIED — repeated runs mutate in place, no duplicates |
+
+### Unverified assumptions
+
+| Assumption | Status |
+|------------|--------|
+| Name uniqueness is stable across different Cavalry scenes | UNVERIFIED — only tested in a single scene |
+| `api.getNiceName` behavior is consistent across Cavalry versions | UNVERIFIED — tested only on the version present during development |
+| `api.getNiceName` behavior on composition nodes (`compNode#N`) | UNVERIFIED — no explicit test; observed no crash |
+
+### Limitations and risks
+
+| Risk | Description |
+|------|-------------|
+| Display-name dependency | Identity relies entirely on `api.getNiceName` matching `"MC__<id>"` — if Cavalry changes this behavior, identity breaks silently |
+| Manual rename collision | If a user manually renames a compiler-owned layer (removing or altering the `MC__` prefix), the next execution will not find it and will create a duplicate |
+| Throw halts full script | The `MC_DUPLICATE` hard error stops the entire script — all animation ops after the failing target do not execute |
+| No fallback identity | There is no UUID-based or `setUserData`-based backup. If `api.getNiceName` is unavailable, the system has no alternative |
+| Compiler not on MCP surface | The identity system only runs when compiler output is manually passed to `cavalry_run_script`; it is not invoked automatically |
+
+---
+
 ## I. Foundation for Future Work
 
 This document establishes what the system **is** today, for use when designing what comes next.
@@ -384,4 +463,4 @@ Before that layer can be designed, the `api.log()` return pipe problem must also
 
 ---
 
-*Last updated: 2026-05-08 (audit pass) | Branch: motion-runtime | Commit: 9fc1d9a*
+*Last updated: 2026-05-08 (identity system implementation + audit) | Branch: motion-runtime | Commit: 9fc1d9a*
