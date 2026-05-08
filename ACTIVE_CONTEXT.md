@@ -112,10 +112,21 @@ These attribute paths have been confirmed working through live script execution 
 
 | API Call | Signature | Status |
 |----------|-----------|--------|
-| `api.create` | `(layerType, name) → id` | VERIFIED — confirmed via live execution 2026-05-08 |
-| `api.set` | `(id, { attr: value, ... })` | VERIFIED — confirmed via live execution 2026-05-08 |
-| `api.keyframe` | `(id, frame, { attr: value })` | VERIFIED — animates correctly between keyframes, confirmed 2026-05-08 |
-| `api.magicEasing` | `(id, attrPath, frame, easingType)` | VERIFIED — easing is applied to the START keyframe and affects the curve going forward; applying to the end keyframe has no effect (produces linear) |
+| `api.create` | `(layerType, name) → internalId` | VERIFIED — returns internal ID in `{type}#{N}` format (e.g. `textShape#11`); display name is stored separately |
+| `api.set` | `(id, { attr: value, ... })` | VERIFIED — requires internal ID; display name as first arg does NOT work |
+| `api.keyframe` | `(id, frame, { attr: value })` | VERIFIED — animates correctly between keyframes |
+| `api.magicEasing` | `(id, attrPath, frame, easingType)` | VERIFIED — easing applies to the START keyframe, affecting the outgoing curve; applying to end keyframe has no effect |
+| `api.getAllSceneLayers` | `() → string[]` | VERIFIED — returns array of internal IDs (`textShape#N` format); same format as `api.create` return value |
+| `api.getNiceName` | `(internalId) → string` | VERIFIED — returns the display name passed as second arg to `api.create`; the ONLY confirmed way to look up a layer by name |
+| `api.layerExists` | `(internalId) → boolean` | VERIFIED — works with internal IDs; returns false for display names |
+
+### Verified Layer ID Facts
+
+- Internal ID format: `{layerType}#{N}` (e.g. `textShape#5`, `compNode#1`)
+- Display names (second param to `api.create`) are NOT usable as API identifiers
+- `api.get(id, "name")` does NOT work — "name" is not a valid attribute path
+- No dedicated name-lookup function exists (`getLayerByName`, `find`, etc. are all undefined)
+- `api.getNiceName(internalId)` is the ONLY verified mechanism for display-name retrieval
 
 ---
 
@@ -206,6 +217,29 @@ The primary reason for the Stallion v0.7 refactor.
 - `existingLayerByName` target kind is explicitly unsupported in v1 generator (requires unverified scene-query API)
 - **VERIFIED 2026-05-08:** Compiler output manually executed via `cavalry_run_script` produced correct bouncing animation (`bounce_in` preset)
 - **Known preset bug fixed 2026-05-08:** `bounce_in` preset was applying `BounceOut` easing to `endFrame` — Cavalry applies easing from the keyframe it is set on going forward, so easing must be on `startFrame`. Fixed in `presets/bounceIn.ts`.
+
+### Deterministic Layer Identity System v1 (implemented 2026-05-08)
+
+**Status: IMPLEMENTED and VERIFIED via live execution.**
+
+Files added/modified:
+- `src/compiler/motionDSL.ts` — added `compilerOwned` target kind and `MC_NAMESPACE`/`compilerLayerName()` exports
+- `src/compiler/validators.ts` — added validation for `compilerOwned` (compilerLayerId pattern `[a-zA-Z0-9_]+`, layerType non-empty)
+- `src/compiler/motionCompiler.ts` — updated `targetKey()` to handle `compilerOwned`
+- `src/compiler/sceneIdentityResolver.ts` (NEW) — generates reconciliation JS block
+- `src/compiler/cavalryGenerator.ts` — replaced `resolveTargetIdLiteral` with `emitTargetResolution`; wired in `sceneIdentityResolver`
+
+**Identity mechanism:**
+- Compiler-owned layers use reserved namespace prefix `MC__` (e.g. `MC__title_text`)
+- Lookup: `api.getAllSceneLayers()` → filter by `api.getNiceName(id) === "MC__<id>"`
+- 0 matches → `api.create(layerType, "MC__<id>")` (create)
+- 1 match → reuse existing internal ID (mutate in place)
+- 2+ matches → `throw new Error("MC_DUPLICATE:...")` (hard error, no recovery)
+
+**Verified reconciliation behavior (2026-05-08):**
+- Two consecutive executions with `compilerLayerId: "title_text"` produced exactly ONE layer (`textShape#11`)
+- Second run found and reused the layer — no duplicate created
+- Animation applied correctly on both runs
 
 ### Archive: `archive_versions/index_pre_stallion_v07.ts`
 

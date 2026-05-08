@@ -122,6 +122,28 @@ export function validateClip(clip: MotionClip, index: number): void {
         `${root}.target`,
       );
     }
+  } else if (clip.target.kind === "compilerOwned") {
+    if (
+      !clip.target.compilerLayerId ||
+      typeof clip.target.compilerLayerId !== "string"
+    ) {
+      throw new MotionValidationError(
+        "compilerOwned requires non-empty compilerLayerId",
+        `${root}.target`,
+      );
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(clip.target.compilerLayerId)) {
+      throw new MotionValidationError(
+        `compilerLayerId must match [a-zA-Z0-9_]+ (got "${clip.target.compilerLayerId}")`,
+        `${root}.target`,
+      );
+    }
+    if (!clip.target.layerType || typeof clip.target.layerType !== "string") {
+      throw new MotionValidationError(
+        "compilerOwned requires non-empty layerType",
+        `${root}.target`,
+      );
+    }
   } else {
     throw new MotionValidationError(
       `unsupported target.kind`,

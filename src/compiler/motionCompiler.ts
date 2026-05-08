@@ -18,9 +18,14 @@ import { getPreset } from "./presets/index.js";
 import { validateOps, validateProgram } from "./validators.js";
 
 function targetKey(target: MotionTarget): string {
-  return target.kind === "existingLayerById"
-    ? `id:${target.id}`
-    : `name:${target.name}`;
+  switch (target.kind) {
+    case "existingLayerById":
+      return `id:${target.id}`;
+    case "existingLayerByName":
+      return `name:${target.name}`;
+    case "compilerOwned":
+      return `mc:${target.compilerLayerId}`;
+  }
 }
 
 function buildTargetTable(clips: MotionClip[]): {

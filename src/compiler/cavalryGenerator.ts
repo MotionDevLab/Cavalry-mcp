@@ -21,6 +21,7 @@ import type {
   MotionOp,
   ResolvedTarget,
 } from "./motionDSL.js";
+import { emitReconciliation } from "./sceneIdentityResolver.js";
 
 export class GeneratorError extends Error {
   constructor(message: string) {
@@ -33,15 +34,23 @@ export class GeneratorError extends Error {
 // Target ref → Cavalry layer-id resolution
 // ---------------------------------------------------------------------------
 
-function resolveTargetIdLiteral(target: ResolvedTarget["target"]): string {
-  if (target.kind === "existingLayerById") {
-    return JSON.stringify(target.id);
+/**
+ * Emits lines that resolve a target ref to a Cavalry layer ID variable.
+ *
+ * - existingLayerById: single-line const assignment
+ * - compilerOwned: multi-line reconciliation block via SceneIdentityResolver
+ * - existingLayerByName: unsupported (no verified scene-query API)
+ */
+function emitTargetResolution(t: ResolvedTarget, varName: string): string[] {
+  if (t.target.kind === "existingLayerById") {
+    return [`const ${varName} = ${JSON.stringify(t.target.id)};`];
   }
-  // existingLayerByName is intentionally unsupported in v1: there is no
-  // verified scene-query API path that we can emit without speculation.
+  if (t.target.kind === "compilerOwned") {
+    return emitReconciliation(t.target, varName);
+  }
   throw new GeneratorError(
-    `Target kind "${target.kind}" not supported by v1 generator. ` +
-      `Use { kind: "existingLayerById", id } instead.`,
+    `Target kind "${t.target.kind}" not supported by v1 generator. ` +
+      `Use { kind: "existingLayerById", id } or { kind: "compilerOwned", ... } instead.`,
   );
 }
 
@@ -145,8 +154,7 @@ export function generate(plan: CompiledPlan): string {
   for (const t of plan.targets) {
     const varName = `__${t.ref}`;
     refToVar.set(t.ref, varName);
-    const idLiteral = resolveTargetIdLiteral(t.target);
-    lines.push(`const ${varName} = ${idLiteral};`);
+    lines.push(...emitTargetResolution(t, varName));
   }
   if (plan.targets.length > 0) lines.push("");
 

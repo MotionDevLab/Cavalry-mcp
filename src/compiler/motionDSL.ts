@@ -67,15 +67,39 @@ export type PresetId = (typeof PRESET_IDS)[number];
 // ---------------------------------------------------------------------------
 
 /**
- * Reference to a layer that must already exist in the Cavalry scene.
+ * Reserved namespace prefix for all compiler-owned layers.
+ * Cavalry display names are prefixed with this to avoid collisions with
+ * hand-authored layers. Verified via api.getNiceName() on 2026-05-08.
+ */
+export const MC_NAMESPACE = "MC__";
+
+/**
+ * Returns the deterministic Cavalry display name for a compiler-owned layer.
+ */
+export function compilerLayerName(compilerLayerId: string): string {
+  return `${MC_NAMESPACE}${compilerLayerId}`;
+}
+
+/**
+ * Reference to a layer in the Cavalry scene.
  *
- * v1 generator only supports `existingLayerById`. `existingLayerByName` is
- * reserved in the DSL surface but rejected by the generator until a verified
- * scene-query mechanism is available (avoids hallucinating `api.*` lookups).
+ * Verified target kinds (2026-05-08):
+ * - `existingLayerById`: layer ID is known at compile time (e.g. from api.create return value)
+ * - `compilerOwned`: deterministic identity via MC__ namespace + api.getNiceName lookup
+ *
+ * `existingLayerByName` is reserved in the DSL surface but rejected by the
+ * generator — no verified scene-query mechanism exists for it.
  */
 export type MotionTarget =
   | { kind: "existingLayerById"; id: string }
-  | { kind: "existingLayerByName"; name: string };
+  | { kind: "existingLayerByName"; name: string }
+  | {
+      kind: "compilerOwned";
+      /** Unique compiler-assigned ID. Becomes display name "MC__<compilerLayerId>". */
+      compilerLayerId: string;
+      /** Cavalry layer type passed to api.create (e.g. "textShape", "basicShape"). */
+      layerType: string;
+    };
 
 // ---------------------------------------------------------------------------
 // Timing
