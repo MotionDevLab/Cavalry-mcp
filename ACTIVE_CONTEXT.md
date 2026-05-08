@@ -54,10 +54,10 @@ User natural language
 
 The current branch exposes exactly **2 tools**:
 
-| Tool | Category | Input | What it actually does |
-|------|----------|-------|-----------------------|
-| `cavalry_ping` | Connectivity | none | `GET 127.0.0.1:8080/` with 2s timeout; returns boolean reachability |
-| `cavalry_run_script` | Raw execution | `code: string` | Validates JS, sends raw string to Stallion, returns response text |
+| Tool                 | Category      | Input          | What it actually does                                               |
+| -------------------- | ------------- | -------------- | ------------------------------------------------------------------- |
+| `cavalry_ping`       | Connectivity  | none           | `GET 127.0.0.1:8080/` with 2s timeout; returns boolean reachability |
+| `cavalry_run_script` | Raw execution | `code: string` | Validates JS, sends raw string to Stallion, returns response text   |
 
 **That is the complete tool surface of the current system.**
 
@@ -65,27 +65,27 @@ The current branch exposes exactly **2 tools**:
 
 The pre-v0.7 implementation had **18 additional tools** (all removed to fix Stallion v0.7 compatibility):
 
-| Tool | Category | Cavalry API used |
-|------|----------|-----------------|
-| `cavalry_create_layer` | Scene creation | `api.create(type, name)` → `api.log(layerId)` |
-| `cavalry_set_attribute` | Attributes | `api.set(layerId, attrMap)` |
-| `cavalry_get_attribute` | Attributes | `api.get(layerId, path)` → `api.log(val)` |
-| `cavalry_connect` | Attributes | `api.connect(src, srcAttr, tgt, tgtAttr)` |
-| `cavalry_keyframe` | Animation | `api.keyframe(layerId, frame, attrMap)` |
-| `cavalry_magic_easing` | Animation | `api.magicEasing(layerId, attrPath, frame, type)` |
-| `cavalry_get_scene_layers` | Scene query | `api.getAllSceneLayers()` → `api.log()` |
-| `cavalry_get_selected_layers` | Scene query | `api.getSelection()` → `api.log()` |
-| `cavalry_select_layers` | Scene control | `api.select(ids)` |
-| `cavalry_delete_layers` | Scene control | `api.deleteLayer(ids)` |
-| `cavalry_get_composition_info` | Scene query | `api.getActiveComp()`, `api.get()`, `api.getInFrame/OutFrame()` → `api.log()` |
-| `cavalry_set_current_frame` | Playback | `api.setCurrentFrame(n)` |
-| `cavalry_render_png` | Render | `api.renderPNGFrame(path, scale)` |
-| `cavalry_set_generator` | Layer config | `api.setGenerator(id, generatorId)` |
-| `cavalry_duplicate_layer` | Scene control | `api.select()` + `api.duplicateSelection()` → `api.log()` |
-| `cavalry_get_bounding_box` | Scene query | `api.getBoundingBox(id)` → `api.log()` |
-| `cavalry_save_scene` | File I/O | `api.saveScene(path?)` |
-| `cavalry_open_scene` | File I/O | `api.loadScene(path)` |
-| `cavalry_add_dynamic_attribute` | Layer config | `api.addDynamic(id, name, type)` |
+| Tool                            | Category       | Cavalry API used                                                              |
+| ------------------------------- | -------------- | ----------------------------------------------------------------------------- |
+| `cavalry_create_layer`          | Scene creation | `api.create(type, name)` → `api.log(layerId)`                                 |
+| `cavalry_set_attribute`         | Attributes     | `api.set(layerId, attrMap)`                                                   |
+| `cavalry_get_attribute`         | Attributes     | `api.get(layerId, path)` → `api.log(val)`                                     |
+| `cavalry_connect`               | Attributes     | `api.connect(src, srcAttr, tgt, tgtAttr)`                                     |
+| `cavalry_keyframe`              | Animation      | `api.keyframe(layerId, frame, attrMap)`                                       |
+| `cavalry_magic_easing`          | Animation      | `api.magicEasing(layerId, attrPath, frame, type)`                             |
+| `cavalry_get_scene_layers`      | Scene query    | `api.getAllSceneLayers()` → `api.log()`                                       |
+| `cavalry_get_selected_layers`   | Scene query    | `api.getSelection()` → `api.log()`                                            |
+| `cavalry_select_layers`         | Scene control  | `api.select(ids)`                                                             |
+| `cavalry_delete_layers`         | Scene control  | `api.deleteLayer(ids)`                                                        |
+| `cavalry_get_composition_info`  | Scene query    | `api.getActiveComp()`, `api.get()`, `api.getInFrame/OutFrame()` → `api.log()` |
+| `cavalry_set_current_frame`     | Playback       | `api.setCurrentFrame(n)`                                                      |
+| `cavalry_render_png`            | Render         | `api.renderPNGFrame(path, scale)`                                             |
+| `cavalry_set_generator`         | Layer config   | `api.setGenerator(id, generatorId)`                                           |
+| `cavalry_duplicate_layer`       | Scene control  | `api.select()` + `api.duplicateSelection()` → `api.log()`                     |
+| `cavalry_get_bounding_box`      | Scene query    | `api.getBoundingBox(id)` → `api.log()`                                        |
+| `cavalry_save_scene`            | File I/O       | `api.saveScene(path?)`                                                        |
+| `cavalry_open_scene`            | File I/O       | `api.loadScene(path)`                                                         |
+| `cavalry_add_dynamic_attribute` | Layer config   | `api.addDynamic(id, name, type)`                                              |
 
 **Why they were removed:** All value-returning tools depended on `api.log()` output flowing back through Stallion's HTTP response. This broke under Stallion v0.7. Rather than fix each tool, the entire wrapper layer was removed and replaced with a single raw-script passthrough.
 
@@ -95,30 +95,30 @@ The pre-v0.7 implementation had **18 additional tools** (all removed to fix Stal
 
 These attribute paths have been confirmed working through live script execution on 2026-05-08.
 
-| Layer Type  | Attribute Path | Value Format | Notes |
-|-------------|---------------|--------------|-------|
-| textShape   | `fontSize`    | number       | confirmed |
-| textShape   | `opacity`     | 0–100        | confirmed |
-| textShape   | `fill.color`  | hex string   | confirmed |
-| textShape   | `fontColor`   | hex string   | confirmed — correct path for text color (not `color`, `textColor`, `fill`, `style.fill`, `appearance.color`) |
-| textShape   | `text`        | string       | confirmed |
-| any         | `position.x`  | number (px)  | confirmed via execution |
-| any         | `position.y`  | number (px)  | confirmed via execution |
-| any         | `scale.x`     | number       | confirmed via execution |
-| any         | `scale.y`     | number       | confirmed via execution |
-| any         | `rotation`    | number (deg) | confirmed via execution |
+| Layer Type | Attribute Path | Value Format | Notes                                                                                                        |
+| ---------- | -------------- | ------------ | ------------------------------------------------------------------------------------------------------------ |
+| textShape  | `fontSize`     | number       | confirmed                                                                                                    |
+| textShape  | `opacity`      | 0–100        | confirmed                                                                                                    |
+| textShape  | `fill.color`   | hex string   | confirmed                                                                                                    |
+| textShape  | `fontColor`    | hex string   | confirmed — correct path for text color (not `color`, `textColor`, `fill`, `style.fill`, `appearance.color`) |
+| textShape  | `text`         | string       | confirmed                                                                                                    |
+| any        | `position.x`   | number (px)  | confirmed via execution                                                                                      |
+| any        | `position.y`   | number (px)  | confirmed via execution                                                                                      |
+| any        | `scale.x`      | number       | confirmed via execution                                                                                      |
+| any        | `scale.y`      | number       | confirmed via execution                                                                                      |
+| any        | `rotation`     | number (deg) | confirmed via execution                                                                                      |
 
 ### Verified API Calls
 
-| API Call | Signature | Status |
-|----------|-----------|--------|
-| `api.create` | `(layerType, name) → internalId` | VERIFIED — returns internal ID in `{type}#{N}` format (e.g. `textShape#11`); display name is stored separately |
-| `api.set` | `(id, { attr: value, ... })` | VERIFIED — requires internal ID; display name as first arg does NOT work |
-| `api.keyframe` | `(id, frame, { attr: value })` | VERIFIED — animates correctly between keyframes |
-| `api.magicEasing` | `(id, attrPath, frame, easingType)` | VERIFIED — easing applies to the START keyframe, affecting the outgoing curve; applying to end keyframe has no effect |
-| `api.getAllSceneLayers` | `() → string[]` | VERIFIED — returns array of internal IDs (`textShape#N` format); same format as `api.create` return value |
-| `api.getNiceName` | `(internalId) → string` | VERIFIED — returns the display name passed as second arg to `api.create`; the ONLY confirmed way to look up a layer by name |
-| `api.layerExists` | `(internalId) → boolean` | VERIFIED — works with internal IDs; returns false for display names |
+| API Call                | Signature                           | Status                                                                                                                      |
+| ----------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `api.create`            | `(layerType, name) → internalId`    | VERIFIED — returns internal ID in `{type}#{N}` format (e.g. `textShape#11`); display name is stored separately              |
+| `api.set`               | `(id, { attr: value, ... })`        | VERIFIED — requires internal ID; display name as first arg does NOT work                                                    |
+| `api.keyframe`          | `(id, frame, { attr: value })`      | VERIFIED — animates correctly between keyframes                                                                             |
+| `api.magicEasing`       | `(id, attrPath, frame, easingType)` | VERIFIED — easing applies to the START keyframe, affecting the outgoing curve; applying to end keyframe has no effect       |
+| `api.getAllSceneLayers` | `() → string[]`                     | VERIFIED — returns array of internal IDs (`textShape#N` format); same format as `api.create` return value                   |
+| `api.getNiceName`       | `(internalId) → string`             | VERIFIED — returns the display name passed as second arg to `api.create`; the ONLY confirmed way to look up a layer by name |
+| `api.layerExists`       | `(internalId) → boolean`            | VERIFIED — works with internal IDs; returns false for display names                                                         |
 
 ### Verified Layer ID Facts
 
@@ -175,13 +175,13 @@ The primary reason for the Stallion v0.7 refactor.
 
 ## D. README vs Reality Audit
 
-| README Claim | Actual Reality | Gap Type |
-|-------------|---------------|----------|
-| "Create layers, set attributes, animate with keyframes, render frames, and more — all through natural language" | Natural language → LLM generates raw JS → executes | Overclaim: system is a scripting bridge, not a natural language system |
-| 21 tools listed in the "Available tools" table | 2 tools exist in current code | Wrong: README was not updated after the Stallion v0.7 refactor |
-| "cavalry_create_layer — Create a layer (textShape, basicShape, null, etc.)" | This tool does not exist in current code | Outdated: lives in archived file only |
-| Example: "Create a bouncing text that says Hello World" / "Claude will: 1. Create a textShape layer, 2. Set text content..." | Claude must produce all of this as a single raw JS string via `cavalry_run_script` | Misleading: implies 4-step tool chain that cannot execute |
-| Implies structured attribute access and keyframe control via discrete tools | All of this must be hand-written JS inside a single `code` parameter | Wrong abstraction level depicted |
+| README Claim                                                                                                                 | Actual Reality                                                                     | Gap Type                                                               |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| "Create layers, set attributes, animate with keyframes, render frames, and more — all through natural language"              | Natural language → LLM generates raw JS → executes                                 | Overclaim: system is a scripting bridge, not a natural language system |
+| 21 tools listed in the "Available tools" table                                                                               | 2 tools exist in current code                                                      | Wrong: README was not updated after the Stallion v0.7 refactor         |
+| "cavalry_create_layer — Create a layer (textShape, basicShape, null, etc.)"                                                  | This tool does not exist in current code                                           | Outdated: lives in archived file only                                  |
+| Example: "Create a bouncing text that says Hello World" / "Claude will: 1. Create a textShape layer, 2. Set text content..." | Claude must produce all of this as a single raw JS string via `cavalry_run_script` | Misleading: implies 4-step tool chain that cannot execute              |
+| Implies structured attribute access and keyframe control via discrete tools                                                  | All of this must be hand-written JS inside a single `code` parameter               | Wrong abstraction level depicted                                       |
 
 ---
 
@@ -225,6 +225,7 @@ The primary reason for the Stallion v0.7 refactor.
 **Status: IMPLEMENTED and VERIFIED via live execution.**
 
 Files added/modified:
+
 - `src/compiler/motionDSL.ts` — added `compilerOwned` target kind and `MC_NAMESPACE`/`compilerLayerName()` exports
 - `src/compiler/validators.ts` — added validation for `compilerOwned` (compilerLayerId pattern `[a-zA-Z0-9_]+`, layerType non-empty)
 - `src/compiler/motionCompiler.ts` — updated `targetKey()` to handle `compilerOwned`
@@ -232,6 +233,8 @@ Files added/modified:
 - `src/compiler/cavalryGenerator.ts` — replaced `resolveTargetIdLiteral` with `emitTargetResolution`; wired in `sceneIdentityResolver`
 
 **Identity mechanism:**
+
+- Identity is name-based and NOT resilient to renaming or external mutation.
 - Compiler-owned layers use reserved namespace prefix `MC__` (e.g. `MC__title_text`)
 - Lookup: `api.getAllSceneLayers()` → filter by `api.getNiceName(id) === "MC__<id>"`
 - 0 matches → `api.create(layerType, "MC__<id>")` (create)
@@ -239,6 +242,7 @@ Files added/modified:
 - 2+ matches → `throw new Error("MC_DUPLICATE:...")` (hard error, no recovery)
 
 **Verified reconciliation behavior (2026-05-08):**
+
 - Two consecutive executions with `compilerLayerId: "title_text"` produced exactly ONE layer (`textShape#11`)
 - Second run found and reused the layer — no duplicate created
 - Animation applied correctly on both runs
@@ -290,6 +294,7 @@ User: "Create bouncing Hello World text"
 ### What "working in script mode" actually means
 
 When the system "works":
+
 - Claude has been given (or generates from training) syntactically correct Cavalry JS
 - The JS uses valid `api.*` calls with correct argument types
 - The operation does not depend on `api.log()` returning values
@@ -299,18 +304,18 @@ When the system "works":
 
 ## G. Key Risks
 
-| Risk | Severity | Description |
-|------|----------|-------------|
-| No semantic abstraction | Critical | LLM must hallucinate correct Cavalry JS API calls; incorrect calls silently succeed |
-| api.log() unreliable | High | No reliable way to get return values (layer IDs, attribute values) back from Cavalry in v0.7 |
-| README misleads users | High | Users expect 21 tools; only 2 exist; example conversation is impossible with current code |
-| No visual feedback loop | High | Claude cannot verify visual outcomes; "success" means HTTP 200, not correct animation |
-| Fragile multi-step state | Medium | Layer IDs from step 1 must be manually threaded into step 2+ in a single script |
-| JS injection surface | Low | Safety validation is pattern-matching only; does not prevent Cavalry API misuse |
-| Easing type knowledge | Medium | BounceOut, ElasticIn, etc. must be spelled exactly right; no validation; silent failure |
-| Identity via display name | Medium | `MC__` identity depends on `api.getNiceName` — user manually renaming a layer breaks reconciliation silently |
-| MC_DUPLICATE halts execution | Medium | If two layers share the same `MC__` name, the reconciliation `throw` stops the entire script; subsequent ops do not run |
-| No fallback identity | Medium | No UUID or `setUserData` backup exists; if `api.getNiceName` is unavailable, the identity system has no alternative |
+| Risk                         | Severity | Description                                                                                                             |
+| ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| No semantic abstraction      | Critical | LLM must hallucinate correct Cavalry JS API calls; incorrect calls silently succeed                                     |
+| api.log() unreliable         | High     | No reliable way to get return values (layer IDs, attribute values) back from Cavalry in v0.7                            |
+| README misleads users        | High     | Users expect 21 tools; only 2 exist; example conversation is impossible with current code                               |
+| No visual feedback loop      | High     | Claude cannot verify visual outcomes; "success" means HTTP 200, not correct animation                                   |
+| Fragile multi-step state     | Medium   | Layer IDs from step 1 must be manually threaded into step 2+ in a single script                                         |
+| JS injection surface         | Low      | Safety validation is pattern-matching only; does not prevent Cavalry API misuse                                         |
+| Easing type knowledge        | Medium   | BounceOut, ElasticIn, etc. must be spelled exactly right; no validation; silent failure                                 |
+| Identity via display name    | Medium   | `MC__` identity depends on `api.getNiceName` — user manually renaming a layer breaks reconciliation silently            |
+| MC_DUPLICATE halts execution | Medium   | If two layers share the same `MC__` name, the reconciliation `throw` stops the entire script; subsequent ops do not run |
+| No fallback identity         | Medium   | No UUID or `setUserData` backup exists; if `api.getNiceName` is unavailable, the identity system has no alternative     |
 
 ---
 
@@ -386,7 +391,11 @@ A stateless, compiler-owned reconciliation layer that gives each logical animati
 A new DSL concept added to `MotionTarget` in `motionDSL.ts`:
 
 ```typescript
-{ kind: "compilerOwned"; compilerLayerId: string; layerType: string }
+{
+  kind: "compilerOwned";
+  compilerLayerId: string;
+  layerType: string;
+}
 ```
 
 - `compilerLayerId` — unique identifier assigned by the compiler (e.g. `"title_text"`)
@@ -402,6 +411,7 @@ Generated JS emitted by `cavalryGenerator.ts` for each `compilerOwned` target:
 3. Collect all matches into a list
 
 Decision:
+
 - **0 matches** → `api.create(layerType, "MC__<compilerLayerId>")` — layer is new, create it
 - **1 match** → use the existing internal ID — layer is known, mutate in place
 - **2+ matches** → `throw new Error("MC_DUPLICATE:...")` — hard error, execution halts, no recovery
@@ -420,30 +430,30 @@ Zero duplicate layers per identity key per execution. If the script runs 100 tim
 
 ### Verified assumptions (confirmed via live execution 2026-05-08)
 
-| Assumption | Verification |
-|------------|-------------|
-| `api.getAllSceneLayers()` returns usable layer identifiers | VERIFIED — same format as `api.create` return value |
-| `api.getNiceName(internalId)` returns the display name from `api.create` | VERIFIED — returns exact string passed as second arg |
-| `api.create` + `api.getNiceName` pairing supports reconciliation | VERIFIED — two consecutive executions produced exactly one layer; second run reused existing |
-| Reconciliation result is idempotent | VERIFIED — repeated runs mutate in place, no duplicates |
+| Assumption                                                               | Verification                                                                                 |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `api.getAllSceneLayers()` returns usable layer identifiers               | VERIFIED — same format as `api.create` return value                                          |
+| `api.getNiceName(internalId)` returns the display name from `api.create` | VERIFIED — returns exact string passed as second arg                                         |
+| `api.create` + `api.getNiceName` pairing supports reconciliation         | VERIFIED — two consecutive executions produced exactly one layer; second run reused existing |
+| Reconciliation result is idempotent                                      | VERIFIED — repeated runs mutate in place, no duplicates                                      |
 
 ### Unverified assumptions
 
-| Assumption | Status |
-|------------|--------|
-| Name uniqueness is stable across different Cavalry scenes | UNVERIFIED — only tested in a single scene |
+| Assumption                                                       | Status                                                             |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Name uniqueness is stable across different Cavalry scenes        | UNVERIFIED — only tested in a single scene                         |
 | `api.getNiceName` behavior is consistent across Cavalry versions | UNVERIFIED — tested only on the version present during development |
-| `api.getNiceName` behavior on composition nodes (`compNode#N`) | UNVERIFIED — no explicit test; observed no crash |
+| `api.getNiceName` behavior on composition nodes (`compNode#N`)   | UNVERIFIED — no explicit test; observed no crash                   |
 
 ### Limitations and risks
 
-| Risk | Description |
-|------|-------------|
-| Display-name dependency | Identity relies entirely on `api.getNiceName` matching `"MC__<id>"` — if Cavalry changes this behavior, identity breaks silently |
-| Manual rename collision | If a user manually renames a compiler-owned layer (removing or altering the `MC__` prefix), the next execution will not find it and will create a duplicate |
-| Throw halts full script | The `MC_DUPLICATE` hard error stops the entire script — all animation ops after the failing target do not execute |
-| No fallback identity | There is no UUID-based or `setUserData`-based backup. If `api.getNiceName` is unavailable, the system has no alternative |
-| Compiler not on MCP surface | The identity system only runs when compiler output is manually passed to `cavalry_run_script`; it is not invoked automatically |
+| Risk                        | Description                                                                                                                                                 |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Display-name dependency     | Identity relies entirely on `api.getNiceName` matching `"MC__<id>"` — if Cavalry changes this behavior, identity breaks silently                            |
+| Manual rename collision     | If a user manually renames a compiler-owned layer (removing or altering the `MC__` prefix), the next execution will not find it and will create a duplicate |
+| Throw halts full script     | The `MC_DUPLICATE` hard error stops the entire script — all animation ops after the failing target do not execute                                           |
+| No fallback identity        | There is no UUID-based or `setUserData`-based backup. If `api.getNiceName` is unavailable, the system has no alternative                                    |
+| Compiler not on MCP surface | The identity system only runs when compiler output is manually passed to `cavalry_run_script`; it is not invoked automatically                              |
 
 ---
 
@@ -463,4 +473,4 @@ Before that layer can be designed, the `api.log()` return pipe problem must also
 
 ---
 
-*Last updated: 2026-05-08 (identity system implementation + audit) | Branch: motion-runtime | Commit: 9fc1d9a*
+_Last updated: 2026-05-08 (identity system implementation + audit) | Branch: motion-runtime | Commit: 9fc1d9a_
