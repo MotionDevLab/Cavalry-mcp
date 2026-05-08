@@ -40,7 +40,7 @@ export function build(
       kind: "easing",
       targetRef,
       attr: "position.y",
-      frame: endFrame,
+      frame: startFrame,
       type: "BounceOut",
     },
   ];

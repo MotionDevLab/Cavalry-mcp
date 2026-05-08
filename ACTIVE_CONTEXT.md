@@ -112,9 +112,10 @@ These attribute paths have been confirmed working through live script execution 
 
 | API Call | Signature | Status |
 |----------|-----------|--------|
-| `api.create` | `(layerType, name) → id` | confirmed |
-| `api.set` | `(id, { attr: value, ... })` | confirmed |
-| `api.keyframe` | `(id, frame, { attr: value })` | confirmed — animates correctly between keyframes |
+| `api.create` | `(layerType, name) → id` | VERIFIED — confirmed via live execution 2026-05-08 |
+| `api.set` | `(id, { attr: value, ... })` | VERIFIED — confirmed via live execution 2026-05-08 |
+| `api.keyframe` | `(id, frame, { attr: value })` | VERIFIED — animates correctly between keyframes, confirmed 2026-05-08 |
+| `api.magicEasing` | `(id, attrPath, frame, easingType)` | VERIFIED — easing is applied to the START keyframe and affects the curve going forward; applying to the end keyframe has no effect (produces linear) |
 
 ---
 
@@ -192,6 +193,19 @@ The primary reason for the Stallion v0.7 refactor.
 
 - Contains the same 2-commit history
 - No additional semantic layer work present
+
+### Directory: `src/compiler/` (untracked, offline only)
+
+**Status: EXISTS, pipeline VERIFIED offline, NOT connected to MCP runtime.**
+
+- Files: `motionDSL.ts`, `motionCompiler.ts`, `cavalryGenerator.ts`, `intentParser.ts`, `validators.ts`, `presets/`
+- The compiler pipeline (`MotionProgram → CompiledPlan → Cavalry JS string`) is fully implemented as a pure TypeScript module
+- It is NOT imported by `src/index.ts` — it has zero influence on the live MCP execution path
+- `cavalry_run_script` remains the ONLY active execution path
+- The generator (`cavalryGenerator.ts`) deliberately emits only `api.set`, `api.keyframe`, `api.magicEasing` — it does NOT emit `api.create` or any `api.log()`-dependent call
+- `existingLayerByName` target kind is explicitly unsupported in v1 generator (requires unverified scene-query API)
+- **VERIFIED 2026-05-08:** Compiler output manually executed via `cavalry_run_script` produced correct bouncing animation (`bounce_in` preset)
+- **Known preset bug fixed 2026-05-08:** `bounce_in` preset was applying `BounceOut` easing to `endFrame` — Cavalry applies easing from the keyframe it is set on going forward, so easing must be on `startFrame`. Fixed in `presets/bounceIn.ts`.
 
 ### Archive: `archive_versions/index_pre_stallion_v07.ts`
 
@@ -336,4 +350,4 @@ Before that layer can be designed, the `api.log()` return pipe problem must also
 
 ---
 
-*Last updated: 2026-05-08 | Branch: motion-runtime | Commit: 524e2e3*
+*Last updated: 2026-05-08 (audit pass) | Branch: motion-runtime | Commit: 9fc1d9a*
