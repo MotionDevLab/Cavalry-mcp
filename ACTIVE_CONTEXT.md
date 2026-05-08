@@ -91,6 +91,33 @@ The pre-v0.7 implementation had **18 additional tools** (all removed to fix Stal
 
 ---
 
+## B2. Verified Attribute Paths (Confirmed via Execution)
+
+These attribute paths have been confirmed working through live script execution on 2026-05-08.
+
+| Layer Type  | Attribute Path | Value Format | Notes |
+|-------------|---------------|--------------|-------|
+| textShape   | `fontSize`    | number       | confirmed |
+| textShape   | `opacity`     | 0–100        | confirmed |
+| textShape   | `fill.color`  | hex string   | confirmed |
+| textShape   | `fontColor`   | hex string   | confirmed — correct path for text color (not `color`, `textColor`, `fill`, `style.fill`, `appearance.color`) |
+| textShape   | `text`        | string       | confirmed |
+| any         | `position.x`  | number (px)  | confirmed via execution |
+| any         | `position.y`  | number (px)  | confirmed via execution |
+| any         | `scale.x`     | number       | confirmed via execution |
+| any         | `scale.y`     | number       | confirmed via execution |
+| any         | `rotation`    | number (deg) | confirmed via execution |
+
+### Verified API Calls
+
+| API Call | Signature | Status |
+|----------|-----------|--------|
+| `api.create` | `(layerType, name) → id` | confirmed |
+| `api.set` | `(id, { attr: value, ... })` | confirmed |
+| `api.keyframe` | `(id, frame, { attr: value })` | confirmed — animates correctly between keyframes |
+
+---
+
 ## C. Known Runtime Issues
 
 ### 1. `api.log()` Return Pipe — Stallion v0.7 Constraint
