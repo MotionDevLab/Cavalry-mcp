@@ -273,6 +273,29 @@ Verified via `tsx --test` (primary runner). TypeScript compilation clean (`tsc -
 
 **Alias boundary rule (enforced):** alias resolution (`resolveAlias`) is an input-layer concern only. The canonical registry, validator, and generator never accept or process raw aliases — only `CanonicalNodeType` values pass through the compiler pipeline.
 
+### Compiler Contract Runtime Status (2026-05-09)
+
+**System status: STABLE — all 15 contract tests passing.**
+
+- Alias system: stable — `canonicalize()` resolves known aliases to `CanonicalNodeType`; no alias string reaches any compiler layer
+- DSL layer: all `compilerOwned` targets require `CanonicalNodeType` in `layerType`; enforced by TypeScript type system and runtime guard `isCanonicalNodeType()`
+- Validator: pure invariant checker only — no mutation, no alias resolution, no capability checks; throws `MotionValidationError` on any non-canonical or structurally invalid input
+- Generator: enforces execution capability at code-emit boundary; throws `GeneratorError` on compiler contract violations
+
+**Known boundary condition (intentional, not a bug):**
+
+- `existingLayerByName` is a valid DSL `MotionTarget` kind — the validator accepts it if `name` is a non-empty string
+- The v1 generator rejects `existingLayerByName` at `emitTargetResolution` with `GeneratorError` — no verified scene-query API exists for name-based lookup
+- This gap is documented in `motionDSL.ts` and is an intentional separation of concerns
+
+**Contract responsibilities (non-overlapping):**
+
+- Validator = structural correctness only (DSL shape, controlled vocabularies, canonical types)
+- Generator = capability enforcement layer (what the v1 runtime can actually emit)
+- No overlap: the validator does not check generator capability; the generator does not perform structural validation
+
+---
+
 ### Archive: `archive_versions/index_pre_stallion_v07.ts`
 
 - Full 18-tool wrapper implementation
