@@ -26,12 +26,16 @@ test("canonicalize resolves second alias deterministically", () => {
   assert.ok(result === "textShape");
 });
 
+test("canonicalize resolves basicText alias to textShape", () => {
+  assert.strictEqual(canonicalize("basicText"), "textShape");
+});
+
 // ---------------------------------------------------------------------------
 // I2 — unknown input halts pipeline
 // ---------------------------------------------------------------------------
 
 test("canonicalize returns null for unknown input set", () => {
-  const cases = ["basicText", "basicShape", "notANode", ""];
+  const cases = ["basicShape", "notANode", ""];
   for (const input of cases) {
     assert.strictEqual(canonicalize(input), null);
   }
@@ -53,7 +57,7 @@ test("canonical input is identity-preserving", () => {
 test("isCanonicalNodeType matches canonical registry behavior", () => {
   assert.ok(isCanonicalNodeType("textShape"));
 
-  const invalid = ["text", "textLayer", "basicText", "", 42, null, undefined];
+  const invalid = ["text", "textLayer", "basicText", "basicShape", "", 42, null, undefined];
 
   for (const v of invalid) {
     assert.ok(!isCanonicalNodeType(v));
