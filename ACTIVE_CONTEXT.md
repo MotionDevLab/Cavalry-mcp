@@ -577,4 +577,36 @@ Before that layer can be designed, the `api.log()` return pipe problem must also
 
 ---
 
+## K. Planned: Vocabulary Layer (Not Implemented)
+
+> **Status: DESIGN INTENT ONLY. This layer does not exist in any source file.**
+> It is not part of the compiler pipeline, not imported by any module, and has no runtime presence.
+
+### Purpose (conceptual)
+
+A future UX normalization layer intended to sit **above** `intentParser.ts` at the system input boundary. Its role would be to translate free-form natural language animation requests into the controlled vocabulary that `intentParser` already accepts — bridging the gap between arbitrary user phrasing and the fixed phrase set currently required by the intent parser.
+
+### What it is not
+
+- It is not `intentParser.ts`. That module exists and operates on a fixed controlled vocabulary.
+- It is not `canonicalize()` in `nodeRegistry.ts`. That function resolves node type aliases only.
+- It is not wired into parsing, validation, or generation. No existing module calls or depends on it.
+- It does not have a file path, function name, or API surface.
+
+### Conceptual position (not a pipeline diagram)
+
+```
+[future vocabulary layer]   ← does not exist
+        │
+        ▼
+intentParser.ts             ← exists; fixed vocabulary only
+        │
+        ▼
+compiler pipeline           ← exists; canonical types only
+```
+
+This diagram describes a design concept, not an implemented flow. The connection between the vocabulary layer and `intentParser` is not wired.
+
+---
+
 _Last updated: 2026-05-09 (compiler v1 stable — contracts verified, tests passing) | Branch: motion-runtime_
