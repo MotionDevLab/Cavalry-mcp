@@ -22,6 +22,7 @@ import type {
   ResolvedTarget,
 } from "./motionDSL.js";
 import { emitReconciliation } from "./sceneIdentityResolver.js";
+import { isCanonicalNodeType } from "./nodeRegistry.js";
 
 export class GeneratorError extends Error {
   constructor(message: string) {
@@ -46,6 +47,9 @@ function emitTargetResolution(t: ResolvedTarget, varName: string): string[] {
     return [`const ${varName} = ${JSON.stringify(t.target.id)};`];
   }
   if (t.target.kind === "compilerOwned") {
+    if (!isCanonicalNodeType(t.target.layerType)) {
+      throw new GeneratorError("Compiler contract violation");
+    }
     return emitReconciliation(t.target, varName);
   }
   throw new GeneratorError(

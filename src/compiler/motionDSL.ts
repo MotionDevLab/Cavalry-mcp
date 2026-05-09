@@ -6,6 +6,8 @@
  * The Cavalry API surface lives exclusively in `cavalryGenerator.ts`.
  */
 
+import { type CanonicalNodeType } from "./nodeRegistry.js";
+
 // ---------------------------------------------------------------------------
 // Controlled vocabularies
 // ---------------------------------------------------------------------------
@@ -117,8 +119,8 @@ export type MotionTarget =
       kind: "compilerOwned";
       /** Unique compiler-assigned ID. Becomes display name "MC__<compilerLayerId>". */
       compilerLayerId: string;
-      /** Cavalry layer type passed to api.create (e.g. "textShape", "basicShape"). */
-      layerType: string;
+      /** Cavalry layer type passed to api.create. Must be a CanonicalNodeType. */
+      layerType: CanonicalNodeType;
       /**
        * Optional stable identity (v2). When present, reconciliation uses
        * `userData.mcId` as the primary match key so renames do not break identity.

@@ -18,6 +18,7 @@ import {
   type MotionProgram,
   type PresetId,
 } from "./motionDSL.js";
+import { isCanonicalNodeType } from "./nodeRegistry.js";
 
 export class MotionValidationError extends Error {
   constructor(
@@ -142,6 +143,12 @@ export function validateClip(clip: MotionClip, index: number): void {
       throw new MotionValidationError(
         "compilerOwned requires non-empty layerType",
         `${root}.target`,
+      );
+    }
+    if (!isCanonicalNodeType(clip.target.layerType)) {
+      throw new MotionValidationError(
+        `node type "${clip.target.layerType}" not in canonical registry`,
+        `${root}.target.layerType`,
       );
     }
   } else {

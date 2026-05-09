@@ -258,6 +258,21 @@ Files added/modified:
 - Second run found and reused the layer — no duplicate created
 - Animation applied correctly on both runs
 
+### Compiler Pipeline: Contract-Validated (v1 Stable)
+
+**Status: VERIFIED — all compiler contracts enforced and tests passing.**
+
+Verified via `tsx --test` (primary runner). TypeScript compilation clean (`tsc --noEmit`). Node native test runner present but not primary.
+
+| Component | Contract | Status |
+| --------- | -------- | ------ |
+| `motionDSL.ts` | All layer types are `CanonicalNodeType` — no raw strings permitted in the DSL | VERIFIED |
+| `validators.ts` | Pure invariant checker only — no mutation, no alias resolution; throws `MotionValidationError` on invalid `layerType` | VERIFIED |
+| `cavalryGenerator.ts` | Enforces compiler contract at generation boundary; throws `GeneratorError` on invalid input | VERIFIED |
+| `nodeRegistry.ts` | Two fully separated systems: canonical registry (runtime truth) and alias map (input boundary only); `canonicalize()` used ONLY at input boundary, never inside compiler pipeline | VERIFIED |
+
+**Alias boundary rule (enforced):** alias resolution (`resolveAlias`) is an input-layer concern only. The canonical registry, validator, and generator never accept or process raw aliases — only `CanonicalNodeType` values pass through the compiler pipeline.
+
 ### Archive: `archive_versions/index_pre_stallion_v07.ts`
 
 - Full 18-tool wrapper implementation
@@ -539,4 +554,4 @@ Before that layer can be designed, the `api.log()` return pipe problem must also
 
 ---
 
-_Last updated: 2026-05-08 (v2 hybrid identity layer) | Branch: motion-runtime_
+_Last updated: 2026-05-09 (compiler v1 stable — contracts verified, tests passing) | Branch: motion-runtime_
