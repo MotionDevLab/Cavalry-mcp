@@ -8,7 +8,14 @@
       "Bash(npx vitest *)",
       "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\({type: p.type, scripts: p.scripts, jest: p.jest, vitest: p.vitest, devDeps: Object.keys\\(p.devDependencies || {}\\)}, null, 2\\)\\)\")",
       "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.devDependencies, null, 2\\)\\)\")",
-      "Bash(npx tsx *)"
+      "Bash(npx tsx *)",
+      "Bash(Get-ChildItem -Path src\\\\compiler -Recurse)",
+      "Bash(Select-Object FullName)",
+      "Bash(Sort-Object FullName)",
+      "Bash(awk '{print \"  \" $0}')",
+      "Bash(npm test *)",
+      "Bash(node --test dist/runtime-tests/cavalryRuntimeHarness.test.js)",
+      "Bash(node --test dist/compiler/__tests__/dsl-contract.test.js dist/compiler/__tests__/validator.test.js dist/compiler/__tests__/generator-contract.test.js dist/compiler/__tests__/node-registry-guard.test.js dist/compiler/__tests__/nodeRegistry.test.js)"
     ]
   }
 }

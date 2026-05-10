@@ -7,25 +7,16 @@
  */
 
 import { type CanonicalNodeType } from "./nodeRegistry.js";
+import { CONTROLLED_ATTRS } from "../schema/attributeRegistry.js";
 
 // ---------------------------------------------------------------------------
 // Controlled vocabularies
 // ---------------------------------------------------------------------------
 
-/**
- * Closed list of attribute paths the v1 compiler is allowed to emit.
- * Anything outside this list is rejected by validators.
- *
- * Paths confirmed in CLAUDE.md / ACTIVE_CONTEXT.md.
- */
-export const CONTROLLED_ATTRS = [
-  "position.x",
-  "position.y",
-  "scale.x",
-  "scale.y",
-  "rotation",
-  "opacity",
-] as const;
+// Compiler-emittable attribute paths.
+// Single source of truth: ATTRIBUTE_REGISTRY in src/schema/attributeRegistry.ts.
+// Projection: numeric-valued attributes only (MotionOp values are always numbers).
+export { CONTROLLED_ATTRS };
 
 export type ControlledAttr = (typeof CONTROLLED_ATTRS)[number];
 

@@ -1,11 +1,9 @@
-import type { MotionNode } from "../compiler/motionDSL.js";
-
-export const canonicalNode: MotionNode = {
+export const canonicalNode = {
   layerType: "textShape",
   attrs: {},
-} as MotionNode;
+};
 
-export const invalidNode: any = {
+export const invalidNode: { layerType: string; attrs: object } = {
   layerType: "notCanonical",
   attrs: {},
 };
