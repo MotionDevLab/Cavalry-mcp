@@ -16,41 +16,80 @@
 
 ### A1. MCP Tool Surface
 
-**Branch: `motion-runtime` — `src/index.ts`**
+**`src/index.ts`** — v1.2.1
+
+**Production surface (always registered):**
 
 | Tool | Input | What it does |
 |------|-------|--------------|
 | `cavalry_ping` | none | `GET 127.0.0.1:8080/` with 2s timeout; returns boolean |
-| `cavalry_run_script` | `code: string` | Pattern-validates JS, sends raw string to Stallion, returns response text |
+| `cavalry_run_motion` | `prompt: string`, `layerId?: string`, `startFrame?: number`, `durationFrames?: number` | Routes NL through compiler pipeline: `parseIntent → buildProgramFromIntent → compile → generate → sendAuthorizedToCavalry` |
 
-**That is the complete live tool surface. No other tools are exposed.**
+**Debug surface (registered only when `process.env.CAVALRY_MCP_DEBUG === "1"`):**
 
-`validateCode()` in `src/index.ts` blocks Node.js-dangerous patterns only (`process.exit`, `child_process`, `require(`, `fs.`, `net.`). It does NOT validate Cavalry API correctness.
+| Tool | Input | What it does |
+|------|-------|--------------|
+| `cavalry_run_script` | `rawJs: string` | Pattern-validates JS, sends raw string to Stallion via `sendRawToCavalry`. Debug-only. Unreachable from the NL compiler pipeline. |
+
+**Production MCP sessions expose exactly two tools: `cavalry_ping` and `cavalry_run_motion`.** `cavalry_run_script` is absent from production sessions.
+
+**Enforced architecture (`src/index.ts`):**
+- `registerTools(server)` is the sole MCP tool registration surface. Called exactly once from `main()`. Idempotency-guarded: double-call throws `"registerTools: already invoked. Tool registry is bootstrap-only and single-call."` AST enforcement: no `server.tool()` call exists outside `registerTools`; no `new McpServer()` exists outside `main()` — validated by G2 AST walk on every CI run.
+- `process.env.CAVALRY_MCP_DEBUG` is read at `registerTools()` call time, not at module load time. Static env-capture bypass is structurally impossible.
+- `main()` is ESM-entry guarded: `process.argv[1] === fileURLToPath(import.meta.url)`. Test imports of `src/index.ts` do not start `StdioServerTransport` and do not block the event loop.
+- `handleRunMotion` calls `sendAuthorizedToCavalry` only. `sendRawToCavalry` is architecturally unreachable from the NL pipeline by import structure — enforced by G4 source-level assertion.
+- `handleRunScript` calls `sendRawToCavalry` only. Registered only when `CAVALRY_MCP_DEBUG === "1"`.
+
+`validateCode()` blocks Node.js-dangerous patterns (`process.exit`, `child_process`, `require(`, `fs.`, `net.`) in both `runCompiled` and `runRaw`. Does NOT validate Cavalry API correctness.
 
 ---
 
 ### A2. Execution Flow (observed, verified)
 
+**Production path (`cavalry_run_motion` — always registered):**
+
 ```
 User natural language
-        │
-        ▼
-  Claude (LLM) — generates raw JavaScript
         │  MCP stdio transport
         ▼
-  Node.js MCP Server  (dist/index.js)
-  ─ validateCode()     (Node.js dangerous patterns only)
+  cavalry_run_motion
+  ─ parseIntent()          (NL → MotionProgram IR; null on unrecognised input → returns error, Stallion never contacted)
+  ─ buildProgramFromIntent()
+  ─ compile()              (MotionProgram → CompiledPlan; rejects on DSL violations)
+  ─ generate()             (CompiledPlan → CompiledJs + TrustToken via mintTrustToken())
+  ─ runCompiled()
+  ─ validateCode()         (Node.js dangerous patterns blocked)
+  ─ sendAuthorizedToCavalry(AuthorizedExecution)
+        │  consumeTrustToken(token)  ← throws on unknown/consumed token
         │  HTTP POST 127.0.0.1:8080/post
-        │  body: { type: "script", code: "<raw JS string>" }
+        │  body: { type: "script", code: "<CompiledJs>" }
         ▼
-  Stallion v0.7        (HTTP server inside Cavalry)
+  Stallion v0.7            (HTTP server inside Cavalry)
   ─ executes JS in Cavalry's JS Engine
   ─ returns HTTP response text
   ⚠ api.log() output may NOT appear in response body
         │
         ▼
-  Cavalry              (api.* namespace)
+  Cavalry                  (api.* namespace)
 ```
+
+**Debug path (`cavalry_run_script` — registered only when `CAVALRY_MCP_DEBUG=1`):**
+
+```
+rawJs string
+        │  MCP stdio transport
+        ▼
+  cavalry_run_script
+  ─ runRaw()
+  ─ validateCode()         (Node.js dangerous patterns blocked)
+  ─ sendRawToCavalry(code) ← no TrustToken; debug surface only
+        │  HTTP POST 127.0.0.1:8080/post
+        │  body: { type: "script", code: "<raw JS string>" }
+        ▼
+  Stallion v0.7
+```
+
+`sendRawToCavalry` is architecturally unreachable from `handleRunMotion`. The two execution paths share `validateCode()` and `postScript()` but are structurally separate entry points.
 
 **Transport:** stdio (`StdioServerTransport`)
 **Stallion endpoint:** `POST http://127.0.0.1:8080/post`
@@ -59,9 +98,9 @@ User natural language
 
 ---
 
-### A3. Compiler Pipeline Files (exist, offline, NOT connected to MCP runtime)
+### A3. Compiler Pipeline Files (compiler pipeline, imported by `src/index.ts`)
 
-All files under `src/compiler/`. None are imported by `src/index.ts`.
+All files under `src/compiler/`. The full pipeline (`parseIntent → buildProgramFromIntent → compile → generate`) is imported and called by `src/index.ts` via `handleRunMotion`.
 
 | File | Role |
 |------|------|
@@ -69,7 +108,7 @@ All files under `src/compiler/`. None are imported by `src/index.ts`.
 | `motionCompiler.ts` | `compile(program)` — runs `validateProgram` → preset expansion → `finalizeProgram` → `validateOps` → returns `CompiledPlan` |
 | `validators.ts` | `validateProgram()`, `validateClip()`, `validateOps()`, `validateOp()` — pure, throw `MotionValidationError`, no mutation |
 | `finalizeProgram.ts` | Hard runtime boundary: throws on `existingLayerByName` and non-canonical `compilerOwned` types |
-| `cavalryGenerator.ts` | `generate(plan)` — `CompiledPlan → Cavalry JS string`; throws `GeneratorError` on contract violations |
+| `cavalryGenerator.ts` | `generate(plan)` — `CompiledPlan → AuthorizedExecution { code: CompiledJs, token: TrustToken }`; mints `TrustToken` via `mintTrustToken()`; throws `GeneratorError` on contract violations. Only authorized JS emission site. |
 | `nodeRegistry.ts` | `CANONICAL_NODE_TYPES`, `isCanonicalNodeType()`, `ALIAS_MAP`, `canonicalize()` |
 | `sceneIdentityResolver.ts` | `emitReconciliation()` — generates JS reconciliation block for `compilerOwned` targets |
 | `mcIdGenerator.ts` | `generateMcId(layerType)` — format `MC_<type>_<base36-ts>_<base36-random>` |
@@ -143,7 +182,7 @@ Source: `src/schema/attributeRegistry.ts` — `ATTRIBUTE_REGISTRY["textShape"]`.
 
 ### A7. Layer Identity System (v1 + v2)
 
-Implemented in `src/compiler/sceneIdentityResolver.ts` and `src/compiler/mcIdGenerator.ts`. Not connected to MCP runtime. Manually invoked via compiler output passed to `cavalry_run_script`.
+Implemented in `src/compiler/sceneIdentityResolver.ts` and `src/compiler/mcIdGenerator.ts`. Invoked automatically via the `cavalryGenerator.ts` → `sceneIdentityResolver.ts` delegation path when `cavalry_run_motion` processes a `compilerOwned` target.
 
 **v1 — name-based (MC__ namespace):**
 - `api.getAllSceneLayers()` → filter by `api.getNiceName(id) === "MC__<compilerLayerId>"`
@@ -160,7 +199,7 @@ Implemented in `src/compiler/sceneIdentityResolver.ts` and `src/compiler/mcIdGen
 
 ### A8. Test Files (exist)
 
-All in `src/compiler/__tests__/`.
+**Compiler tests** — `src/compiler/__tests__/`:
 
 | File | Tests | What they cover |
 |------|-------|-----------------|
@@ -170,7 +209,77 @@ All in `src/compiler/__tests__/`.
 | `nodeRegistry.test.ts` | 6 | `canonicalize()`, `isCanonicalNodeType()`: determinism, null on unknown, identity |
 | `node-registry-guard.test.ts` | 17 | Full pipeline: canonical, alias, unknown input — all three stages |
 
-**Test runner:** `tsx --test` (primary). All 15+ tests passing as of 2026-05-09.
+**CI guard tests** — `src/__tests__/` (added in v1.2.1):
+
+| File | Tests | What they cover |
+|------|-------|-----------------|
+| `tool-surface-snapshot.test.ts` | 4 | G1: production surface = {cavalry_ping, cavalry_run_motion}; debug surface adds cavalry_run_script; double-call throws |
+| `bootstrap.test.ts` | 6 | G2: AST-enforced: `server.tool()` only inside `registerTools`; `new McpServer()` only inside `main`; grep defense-in-depth; idempotency |
+| `api-grep.test.ts` | 5 | G3: file-exact allowlist for Cavalry JS emission; `mintTrustToken` single non-test import; `CompiledJs` single non-test cast site |
+| `nl-firewall.test.ts` | 8 | G4: unrecognised NL returns "Cavalry was NOT contacted"; valid presets reach execution layer; `handleRunMotion` never calls `sendRawToCavalry` |
+| `trust-token.test.ts` | 14 | G5: unknown sessionId rejected; single-use enforcement; copy-literal-after-consumption invalid; invalid issuer throws; successful path; frozen token |
+
+**Test runner:** `npm test` → `tsx --test "src/**/*.test.ts"`. **70 tests passing as of 2026-05-15.**
+
+---
+
+### A9. Runtime Implementation Structure
+
+**`src/index.ts`** — MCP server entry point
+
+| Export | Signature | Role |
+|--------|-----------|------|
+| `registerTools(server)` | `(McpServer) → void` | Bootstrap-only tool registry. Idempotency-guarded. |
+| `handlePing()` | `() → Promise<Response>` | `cavalry_ping` handler |
+| `handleRunMotion(params)` | `({ prompt, layerId?, startFrame?, durationFrames? }) → Promise<Response>` | `cavalry_run_motion` handler — full compiler pipeline |
+| `handleRunScript(params)` | `({ rawJs }) → Promise<Response>` | `cavalry_run_script` handler — debug bypass only |
+| `__resetBootstrapForTests()` | `() → void` | Test-only: resets idempotency guard. No production use. |
+| `runCompiled(exec)` | `(AuthorizedExecution) → Promise<string>` | Calls `validateCode()` then `sendAuthorizedToCavalry()` |
+| `runRaw(code)` | `(string) → Promise<string>` | Calls `validateCode()` then `sendRawToCavalry()` |
+
+**`src/stallion.ts`** — Stallion HTTP bridge
+
+| Export | Signature | Role |
+|--------|-----------|------|
+| `pingStallion()` | `() → Promise<boolean>` | GET `127.0.0.1:8080/` with 2s timeout |
+| `sendAuthorizedToCavalry(exec, type?)` | `(AuthorizedExecution, string?) → Promise<string>` | Calls `consumeTrustToken(exec.token)` then `postScript()` |
+| `sendRawToCavalry(code, type?)` | `(string, string?) → Promise<string>` | Calls `postScript()` directly — no token |
+| `postScript(code, type?)` | private | `POST 127.0.0.1:8080/post` |
+
+**`src/runtime/trustToken.ts`** — Execution authorization
+
+| Export | Signature | Role |
+|--------|-----------|------|
+| `TrustToken` | `type` | `{ sessionId: string, issuedBy: "cavalryGenerator", timestamp: number }` — frozen on mint |
+| `AuthorizedExecution` | `type` | `{ code: CompiledJs, token: TrustToken }` |
+| `mintTrustToken()` | `() → TrustToken` | Mints token, registers `sessionId` in `liveTokens`. Called only from `cavalryGenerator.generate()`. |
+| `consumeTrustToken(token)` | `(TrustToken) → void` | Registry lookup + single-use deletion. Throws on unknown or consumed sessionId. |
+| `__resetTrustRegistryForTests()` | `() → void` | Test-only: clears `liveTokens`. No production use. |
+
+**`src/compiler/cavalryGenerator.ts`** — Branded JS lowering
+
+| Export | Signature | Role |
+|--------|-----------|------|
+| `CompiledJs` | `type` | `string & { readonly __compiledJs: unique symbol }` — generator-owned brand |
+| `generate(plan)` | `(CompiledPlan) → AuthorizedExecution` | Only authorized JS emission site. Mints `TrustToken` on success. |
+
+---
+
+### A10. CI/Security Enforcement Summary (v1.2.1)
+
+| Guard | Test File | Enforcement Mechanism | Status |
+|-------|-----------|-----------------------|--------|
+| G1 — Tool Surface | `tool-surface-snapshot.test.ts` | Stub `McpServer` records `tool()` calls; asserts exact set per env | ✅ 4 tests |
+| G2 — Bootstrap-Only Registry | `bootstrap.test.ts` | TypeScript Compiler API AST walk: `server.tool()` only inside `registerTools`; `new McpServer()` only inside `main` | ✅ 6 tests |
+| G3 — Compiler Emission Allowlist | `api-grep.test.ts` | File-exact allowlist; AST template-literal detection; `mintTrustToken` single-import; `CompiledJs` single-cast-site | ✅ 5 tests |
+| G4 — NL Firewall | `nl-firewall.test.ts` | Direct `handleRunMotion` calls; source-level brace-count + line-walk | ✅ 8 tests |
+| G5 — TrustToken Single-Use | `trust-token.test.ts` | Registry-based sessionId lookup; single-use deletion; copy-literal; issuer check | ✅ 14 tests |
+
+**`CompiledJs` brand enforcement:** exactly one `as CompiledJs` cast in non-test source → `src/compiler/cavalryGenerator.ts`. CI fails on any additional cast.
+
+**`mintTrustToken` import enforcement:** exactly one non-test, non-definition-file import → `src/compiler/cavalryGenerator.ts`. CI fails on any additional import or barrel re-export.
+
+**Total:** 70 tests passing as of 2026-05-15.
 
 ---
 
@@ -180,15 +289,33 @@ All in `src/compiler/__tests__/`.
 
 ---
 
-### B1. Compiler-First NL Pipeline (intent, not enforced at runtime)
+### B0. Enforced System Invariants (v1.2.1 — enforced in code + CI)
 
-**Intent:** All natural language motion requests should flow through the compiler pipeline before reaching `cavalry_run_script`.
+These invariants are **enforced** — each maps to a runtime constraint, a branded type, or a CI guard test that fails on violation.
+
+| # | Invariant | Enforcement |
+|---|-----------|-------------|
+| I1 | **NL Routing Firewall.** Natural language enters only via `cavalry_run_motion`. NL never reaches `sendRawToCavalry` or any raw execution surface. | G4 source-level assertion; import structure of `handleRunMotion` |
+| I2 | **Tool Surface Isolation.** Production surface = `{cavalry_ping, cavalry_run_motion}`. `cavalry_run_script` registered iff `CAVALRY_MCP_DEBUG === "1"`. | G1 stub test; env read at call time |
+| I3 | **Compiler IR Integrity.** Branded `MotionProgram` and `CompiledPlan`. No compiler stage emits JS or executable strings; only `cavalryGenerator` produces `CompiledJs`. | Branded `unique symbol` types; G3 allowlist |
+| I4 | **Execution Authorization.** A `TrustToken` minted only inside `cavalryGenerator` is required for execution. Tokens are single-use, registry-validated, generator-minted. | G5 trust-token tests; `consumeTrustToken()` in `sendAuthorizedToCavalry` |
+| I5 | **Generator-Only JS Emission.** Executable Cavalry JS may only be constructed inside `cavalryGenerator.ts` and its delegated helper `sceneIdentityResolver.ts`. | G3 file-exact allowlist; `CompiledJs` single-cast-site assertion |
+| I6 | **No NL Fallback Execution.** Any failure during intent parsing, compilation, or plan finalization terminates before Stallion contact. No fallback routes NL into raw execution. | `handleRunMotion` returns error response before `runCompiled()` on any compiler failure |
+| I7 | **Validator Purity.** Validation stages reject or report; they do not mutate IR, inject defaults, normalize attributes, infer intent, or synthesize behavior. | `validateClip()` no-mutation test (C2-2); structural enforcement via `CompiledPlan` brand |
+| I8 | **Generator Purity.** `cavalryGenerator` is a pure lowering stage from validated `CompiledPlan` → `CompiledJs`. No reinterpretation, no fallback, no upstream mutation. | `CompiledJs` brand; `generate()` accepts only `CompiledPlan` |
+| I9 | **Tool Registry Bootstrap.** Tool registry is constructed in a single deterministic `registerTools(server)` call. No module-scope, lazy, or runtime tool mutation. | G2 AST walk; idempotency guard; ESM entry-point guard |
+
+---
+
+### B1. Compiler-First NL Pipeline (**enforced as of v1.2.1**)
+
+**Enforced:** All natural language motion requests flow through the compiler pipeline. `cavalry_run_script` is env-gated and unreachable from the NL path.
 
 ```
-NL → intentParser → motionCompiler → cavalryGenerator → cavalry_run_script → Cavalry
+NL → cavalry_run_motion → intentParser → buildProgramFromIntent → compile → generate → sendAuthorizedToCavalry → Cavalry
 ```
 
-**Reality:** This pipeline has no runtime enforcement. `cavalry_run_script` remains directly callable with arbitrary JS. The compiler is an offline module only. No MCP tool routes NL through the compiler automatically.
+The production surface (`cavalry_ping` + `cavalry_run_motion`) has no direct raw-JS execution path. `cavalry_run_script` (`sendRawToCavalry`) is available only when `CAVALRY_MCP_DEBUG=1` and is architecturally separated — `handleRunMotion` cannot reach `sendRawToCavalry` by import structure (enforced by G4).
 
 ---
 
@@ -230,6 +357,20 @@ Unknown input keys are dropped, not guessed. No inference, no fuzzy matching.
 | Compiler | Authoritative — consumes only approved registry snapshots, generates deterministic JS | MUST NOT depend on live probe results or sync summaries |
 
 **Reality:** Cross-layer isolation is enforced by module boundaries and function signatures, not by runtime guards. Nothing prevents a caller from passing a live probe result directly to the compiler. The separation is a design discipline, not a technical lock.
+
+---
+
+### B5. MotionOps IR Expansion Compatibility (forward path)
+
+The current `CompiledPlan` IR is minimal (preset-based, four operations). Future expansion toward a formal MotionOps IR layer (AE-MCP-style operation graph with explicit operation schemas) is anticipated. Any IR expansion **must preserve** all enforced invariants:
+
+- **Deterministic compilation** — same NL input + same plan input → same `CompiledJs` output
+- **Validator-first architecture** — no IR stage generates JS; only `cavalryGenerator` lowers to `CompiledJs`
+- **Generator-only JS emission** — `cavalryGenerator.ts` + `sceneIdentityResolver.ts` remain the only authorized JS emission sites (G3 allowlist must be revised if additional authorized files are introduced)
+- **Explicit operation schemas** — all new IR operations must be typed and schema-validated before reaching the generator
+- **No direct NL → JS execution** — any new path must go through `mintTrustToken()` + `sendAuthorizedToCavalry()`, never `sendRawToCavalry()`
+
+The `CompiledJs` brand and `TrustToken` registry are designed to be forward-compatible with expanded IR operation types without requiring changes to the execution authorization layer.
 
 ---
 
@@ -367,8 +508,8 @@ Unknown input keys are dropped, not guessed. No inference, no fuzzy matching.
 
 ---
 
-**D1. No runtime enforcement of compiler-first pipeline.**
-`cavalry_run_script` is directly callable with raw arbitrary JavaScript. Any caller — including Claude acting on NL input — can bypass the compiler entirely. The NL → compiler-only constraint is a documentation rule, not a code constraint.
+**D1. ~~No runtime enforcement of compiler-first pipeline.~~ (Resolved in v1.2.1)**
+`cavalry_run_script` is now env-gated (`CAVALRY_MCP_DEBUG=1` only) and absent from the production MCP surface. `handleRunMotion` routes exclusively through the compiler pipeline and cannot reach `sendRawToCavalry` by import structure. The four-layer enforcement (Bootstrap G2, Env-gate G1, Compiler IR brands I3, TrustToken G5) closes this limitation. See §B0 (Invariants I1, I2, I4) and §A1 for current enforcement status.
 
 **D2. `api.log()` output is unreliable under Stallion v0.7.**
 `api.log()` output may not appear in the Stallion HTTP response body. This makes it impossible to reliably retrieve values (layer IDs, attribute readbacks) from Cavalry within a single script execution. Any tool or pattern that depends on `api.log()` returning data is fragile.
@@ -404,24 +545,30 @@ README lists 21 tools; current `src/index.ts` has 2. The example conversation fl
 
 ## E. TOOL SURFACE — NL FLOW vs BYPASS
 
-### ALLOWED IN NL → MOTION FLOW (architectural intent)
+### NL → MOTION FLOW (enforced, v1.2.1)
 
-The compiler pipeline (`intentParser → motionCompiler → cavalryGenerator`) is the intended path for all natural language motion requests.
+`cavalry_run_motion` is the **only** MCP tool that accepts natural language motion requests. It routes NL through the full compiler pipeline:
 
-There is no MCP tool named `cavalry_compile`. The compiler is invoked by calling its TypeScript functions directly in application code, then passing the output string to `cavalry_run_script`.
+```
+cavalry_run_motion → parseIntent → buildProgramFromIntent → compile → generate → sendAuthorizedToCavalry
+```
 
-### NOT ALLOWED IN NL → MOTION FLOW
+A `TrustToken` minted by `cavalryGenerator.generate()` is required for execution. Any compiler stage failure returns an error before Stallion is contacted.
 
-**`cavalry_run_script`** — bypass tool. Executes arbitrary raw JavaScript directly in Cavalry. No compiler validation. No attribute registry check. Silent failure on wrong API usage.
+Supported NL presets: `fade_in`, `bounce_in`, `slide_left`, `scale_pop`.
 
-> NL → motion requests MUST be validated against the compiler pipeline contract rules (§C). Any use of `cavalry_run_script` for NL input is outside contract scope. Enforcement depends entirely on tool routing discipline — there is no runtime guard.
+### BYPASS PATH (debug only, env-gated)
 
-### DEBUGGING AND MANUAL SCRIPTS
+**`cavalry_run_script`** — registered only when `CAVALRY_MCP_DEBUG=1`. Absent from production sessions.
+
+Accepts `rawJs: string`. No compiler validation, no `TrustToken`, no attribute registry check. Executes raw JS directly in Cavalry via `sendRawToCavalry`. Silent failure on wrong API usage.
 
 `cavalry_run_script` is explicitly permitted for:
 - Debugging compiler output (manually passing generated JS)
 - One-off manual scene operations
 - Running probe scripts from `src/schema/probeAttribute.ts`
+
+**NL input via `cavalry_run_script` is outside contract scope — structurally prevented in production sessions by the env gate.**
 
 ---
 
@@ -446,7 +593,17 @@ There is no MCP tool named `cavalry_compile`. The compiler is invoked by calling
 | C4-2: generate() throws only GeneratorError | `cavalryGenerator.ts` | `generate()` | `generator-contract.test.ts` (I2, I3) |
 | C4-3: generate() rejects existingLayerByName | `cavalryGenerator.ts:55` | `emitTargetResolution()` | **MISSING TEST COVERAGE** |
 | C4-4: aliases absent from generated JS | `cavalryGenerator.ts` | `generate()` | `node-registry-guard.test.ts` (I2) |
-| C4-5: only cavalryGenerator uses api.* | `cavalryGenerator.ts` | — | **MISSING TEST COVERAGE** |
+| C4-5: only cavalryGenerator uses api.* | `cavalryGenerator.ts`, `sceneIdentityResolver.ts` | — | `api-grep.test.ts` (G3 file-exact allowlist) |
+| G1: production tool surface = {cavalry_ping, cavalry_run_motion} | `src/index.ts` | `registerTools()` | `tool-surface-snapshot.test.ts` |
+| G2: server.tool() only inside registerTools (AST) | `src/index.ts` | `registerTools()` | `bootstrap.test.ts` |
+| G2: new McpServer() only inside main() (AST) | `src/index.ts` | `main()` | `bootstrap.test.ts` |
+| G3: api.* emission file-exact allowlist | `cavalryGenerator.ts`, `sceneIdentityResolver.ts` | — | `api-grep.test.ts` |
+| G3: mintTrustToken single non-test import | `runtime/trustToken.ts`, `compiler/cavalryGenerator.ts` | `mintTrustToken()` | `api-grep.test.ts` |
+| G3: CompiledJs single non-test cast site | `compiler/cavalryGenerator.ts` | `as CompiledJs` | `api-grep.test.ts` |
+| G4: unrecognised NL never contacts Stallion | `src/index.ts` | `handleRunMotion()` | `nl-firewall.test.ts` |
+| G4: handleRunMotion never calls sendRawToCavalry | `src/index.ts` | `handleRunMotion()` | `nl-firewall.test.ts` |
+| G5: TrustToken unknown sessionId rejected | `runtime/trustToken.ts` | `consumeTrustToken()` | `trust-token.test.ts` |
+| G5: TrustToken single-use enforcement | `runtime/trustToken.ts` | `consumeTrustToken()` | `trust-token.test.ts` |
 | C5-1: isApprovedAttribute lookup only | `attributeRegistry.ts` | `isApprovedAttribute()` | **MISSING TEST COVERAGE** |
 | C5-2: ATTRIBUTE_REGISTRY no auto-update | `attributeRegistry.ts` | `ATTRIBUTE_REGISTRY` | **UNVERIFIABLE** |
 | C5-3: isNegativelyConfirmed not used in validation | `attributeRegistry.ts` | `isNegativelyConfirmed()` | **UNVERIFIABLE** |
@@ -472,4 +629,4 @@ All value-returning tools depended on `api.log()` output flowing back through St
 
 ---
 
-_Last updated: 2026-05-09 | Branch: motion-runtime | Restructured as contract spec_
+_Last updated: 2026-05-15 | Branch: motion-runtime | v1.2.1 — compiler-first runtime hardening complete (Plan v1.2.1). 70 tests passing. D1 resolved. §B0 invariants enforced._
