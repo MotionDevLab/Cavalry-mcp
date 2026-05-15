@@ -23,6 +23,51 @@
 
 import type { MotionTarget } from "./motionDSL.js";
 import { compilerLayerName } from "./motionDSL.js";
+import { resolveConstructorAttr } from "./constructorFieldMapping.js";
+
+// ---------------------------------------------------------------------------
+// Constructor field helpers (three-layer split — CF-I7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Semantic layer: resolves user-facing constructor field keys to Cavalry
+ * attribute paths, supporting multi-binding discovered in Phase 2A (CF-I9).
+ * Throws at the pipeline boundary for PROVISIONAL or missing mappings (CF-I4, CF-I8).
+ */
+function mapConstructorFields(
+  layerType: string,
+  fields: Record<string, string>,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    const paths = resolveConstructorAttr(layerType, key); // string[] — CF-I9
+    for (const p of paths) result[p] = value;
+  }
+  return result;
+}
+
+/**
+ * Emission layer: pure string generation only — no resolution, no validation (CF-I7).
+ * Emits exactly one api.set combining all mapped constructor fields (CF-I2).
+ * Returns an empty array when no constructor fields are present.
+ *
+ * Called POST-resolution, outside all if/else branches, so constructor fields
+ * apply to BOTH newly-created and reused layers on every execution (CF-I1).
+ */
+function emitConstructorFieldLines(
+  varName: string,
+  target: Extract<MotionTarget, { kind: "compilerOwned" }>,
+): string[] {
+  if (!target.constructorFields || Object.keys(target.constructorFields).length === 0) {
+    return [];
+  }
+  const mapped = mapConstructorFields(target.layerType, target.constructorFields);
+  if (Object.keys(mapped).length === 0) return [];
+  // CF-I2: single api.set call with all fields combined
+  return [`api.set(${varName}, ${JSON.stringify(mapped)});`];
+}
+
+// ---------------------------------------------------------------------------
 
 /**
  * Emits the JS reconciliation block for a compiler-owned target.
@@ -96,7 +141,14 @@ export function emitReconciliation(
       `  if (api.getNiceName(${allVar}[${iVar}]) === ${nameVar}) { ${hitsVar}.push(${allVar}[${iVar}]); }`,
       `}`,
       `if (${hitsVar}.length > 1) { throw new Error("MC_DUPLICATE:" + ${nameVar}); }`,
-      `var ${varName} = ${hitsVar}.length === 1 ? ${hitsVar}[0] : api.create(${JSON.stringify(target.layerType)}, ${nameVar});`,
+      `var ${varName};`,
+      `if (${hitsVar}.length === 1) {`,
+      `  ${varName} = ${hitsVar}[0];`,
+      `} else {`,
+      `  ${varName} = api.create(${JSON.stringify(target.layerType)}, ${nameVar});`,
+      `}`,
+      // Constructor fields applied post-resolution — create OR reuse (CF-I1)
+      ...emitConstructorFieldLines(varName, target),
     ];
   }
 
@@ -120,7 +172,7 @@ export function emitReconciliation(
     `  }`,
     `}`,
     `if (${hitsVar}.length > 1) { throw new Error("MC_DUPLICATE:" + ${mcIdVar}); }`,
-    // STEP 3 — reuse or CREATE; persist mcId so future runs use primary match
+    // STEP 3 — reuse or CREATE; persist mcId inside create branch only
     `var ${varName};`,
     `if (${hitsVar}.length === 1) {`,
     `  ${varName} = ${hitsVar}[0];`,
@@ -128,5 +180,7 @@ export function emitReconciliation(
     `  ${varName} = api.create(${JSON.stringify(target.layerType)}, ${nameVar});`,
     `  api.set(${varName}, { "userData.mcId": ${mcIdVar} });`,
     `}`,
+    // STEP 4 — constructor fields post-resolution — create OR reuse (CF-I1)
+    ...emitConstructorFieldLines(varName, target),
   ];
 }

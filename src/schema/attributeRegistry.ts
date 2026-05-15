@@ -131,7 +131,10 @@ export const ATTRIBUTE_REGISTRY: Readonly<Record<string, AttributeRegistry>> =
         {
           attribute: "text",
           valueType: "string",
-          verifiedAt: "2026-05-08",
+          verifiedAt: "2026-05-15",
+          notes:
+            "Phase 2A visual confirmation 2026-05-15: api.set({text:'PROBE_text'}) visually changed canvas. " +
+            "Candidates 'string','content','value','sourceText' all returned 'Attribute not found'.",
         },
       ],
     },
@@ -197,6 +200,26 @@ export const NEGATIVELY_CONFIRMED_ATTRIBUTES: Readonly<
       attribute: "name",
       reason: "api.get(id, 'name') does not work — not a valid attribute path, observed via ACTIVE_CONTEXT.md §B2",
       confirmedAt: "2026-05-08",
+    },
+    {
+      attribute: "string",
+      reason: "Phase 2A probe 2026-05-15: 'Attribute not found' error from Cavalry",
+      confirmedAt: "2026-05-15",
+    },
+    {
+      attribute: "content",
+      reason: "Phase 2A probe 2026-05-15: 'Attribute not found' error from Cavalry",
+      confirmedAt: "2026-05-15",
+    },
+    {
+      attribute: "value",
+      reason: "Phase 2A probe 2026-05-15: 'Attribute not found' error from Cavalry",
+      confirmedAt: "2026-05-15",
+    },
+    {
+      attribute: "sourceText",
+      reason: "Phase 2A probe 2026-05-15: 'Attribute not found' error from Cavalry",
+      confirmedAt: "2026-05-15",
     },
   ],
 };

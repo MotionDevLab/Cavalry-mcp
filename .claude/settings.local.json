@@ -22,7 +22,9 @@
       "Bash(node --experimental-strip-types --test src/__tests__/nl-firewall.test.ts)",
       "Read(//tmp/**)",
       "Bash(tee /tmp/guard-tests.txt)",
-      "mcp__cavalry__cavalry_run_motion"
+      "mcp__cavalry__cavalry_run_motion",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
     ]
   }
 }

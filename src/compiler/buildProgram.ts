@@ -95,7 +95,7 @@ export function buildProgramFromIntent(
 ): MotionProgram {
   const startFrame = options.startFrame ?? 0;
   const durationFrames = options.durationFrames ?? 24;
-  const target = buildTarget(intent, options.layerId);
+  let target = buildTarget(intent, options.layerId);
 
   // Pre-compiler NL normalization — no-op when rawInput is absent.
   // Runs AFTER target resolution so the correct nodeType is passed to the
@@ -106,6 +106,20 @@ export function buildProgramFromIntent(
   const semantic = options.rawInput
     ? resolveSemantics(options.rawInput, nodeType)
     : null;
+
+  // Attach constructor fields (e.g. text content) to compiler-owned targets
+  // when semantic resolution produced any. Only compilerOwned targets may carry
+  // constructor fields — existing targets are never mutated.
+  if (
+    target.kind === "compilerOwned" &&
+    semantic &&
+    Object.keys(semantic.constructorFields).length > 0
+  ) {
+    target = {
+      ...target,
+      constructorFields: semantic.constructorFields as Record<string, string>,
+    };
+  }
 
   // Preset: semanticResolver motionIntent takes priority when it resolves a
   // named preset; falls back to intentParser result (always-present default).

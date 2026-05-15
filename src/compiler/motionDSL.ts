@@ -118,6 +118,17 @@ export type MotionTarget =
        * When absent, v1 name-only matching is used (backward compat).
        */
       identity?: CompilerIdentity;
+      /**
+       * Compiler-owned initialization attributes applied immediately after
+       * api.create() during reconciliation — only on newly-created layers.
+       *
+       * Constraints:
+       *   - Non-animated string values only (v1).
+       *   - Emitted exclusively inside the creation branch of reconciliation.
+       *   - Originates only from semantic resolution (never inferred or defaulted).
+       *   - Must NOT appear on existingLayerById / existingLayerByName targets.
+       */
+      constructorFields?: Record<string, string>;
     };
 
 // ---------------------------------------------------------------------------

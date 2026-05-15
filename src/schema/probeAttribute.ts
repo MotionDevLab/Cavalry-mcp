@@ -128,7 +128,14 @@ export const PROBE_CANDIDATES: Readonly<
       status: "confirmed",
       notes: "correct text color path",
     },
-    { attribute: "text", sentinelType: "string", status: "confirmed" },
+    {
+      attribute: "text",
+      sentinelType: "string",
+      status: "confirmed",
+      notes:
+        "Phase 2A visual confirmation 2026-05-15: canvas showed 'PROBE_text' after api.set. " +
+        "Confirmed visual driver for textShape text content.",
+    },
     // Candidates — mentioned in CLAUDE.md as "common correct paths" but not yet
     // confirmed via the probe protocol (may or may not persist on readback)
     {
@@ -179,6 +186,31 @@ export const PROBE_CANDIDATES: Readonly<
       sentinelType: "string",
       status: "negatively-confirmed",
       notes: "failed as of 2026-05-08; api.get(id, 'name') not a valid path",
+    },
+    // Phase 2A probe 2026-05-15: all four returned "Attribute not found" from Cavalry
+    {
+      attribute: "string",
+      sentinelType: "string",
+      status: "negatively-confirmed",
+      notes: "Phase 2A 2026-05-15: 'Attribute not found'",
+    },
+    {
+      attribute: "content",
+      sentinelType: "string",
+      status: "negatively-confirmed",
+      notes: "Phase 2A 2026-05-15: 'Attribute not found'",
+    },
+    {
+      attribute: "value",
+      sentinelType: "string",
+      status: "negatively-confirmed",
+      notes: "Phase 2A 2026-05-15: 'Attribute not found'",
+    },
+    {
+      attribute: "sourceText",
+      sentinelType: "string",
+      status: "negatively-confirmed",
+      notes: "Phase 2A 2026-05-15: 'Attribute not found'",
     },
   ],
 };

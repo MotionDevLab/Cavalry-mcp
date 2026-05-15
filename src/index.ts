@@ -120,8 +120,9 @@ export async function handleRunMotion(params: {
   layerId?: string;
   startFrame?: number;
   durationFrames?: number;
+  text?: string;
 }): Promise<{ content: { type: "text"; text: string }[] }> {
-  const { prompt, layerId, startFrame, durationFrames } = params;
+  const { prompt, layerId, startFrame, durationFrames, text } = params;
 
   // STAGE 1 — Intent parsing (controlled vocabulary only, no LLM fallback)
   const intent = parseIntent(prompt);
@@ -148,6 +149,7 @@ export async function handleRunMotion(params: {
       layerId,
       startFrame,
       durationFrames,
+      rawInput: text !== undefined ? { text } : undefined,
     });
     const plan = compile(program);
     exec = generate(plan);
@@ -208,6 +210,10 @@ const MOTION_SCHEMA = {
     .min(1)
     .optional()
     .describe("Animation duration in frames (default 24)"),
+  text: z
+    .string()
+    .optional()
+    .describe("Text string to display on the canvas (textShape layers only)."),
 } as const;
 
 const SCRIPT_SCHEMA = {
