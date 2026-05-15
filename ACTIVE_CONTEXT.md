@@ -8,6 +8,20 @@
 
 ---
 
+## System Status Summary
+
+**Text-on-canvas compiler pipeline status (2026-05-15): production-stable for `textShape`.**
+
+| Phase | Status | Result |
+|-------|--------|--------|
+| Phase 1 | COMPLETE | `constructorFields` wired from semantic resolution into compiler-owned targets |
+| Phase 2A | COMPLETE | `textShape.text` attribute validated by probe and runtime visual confirmation |
+| Phase 2B | COMPLETE | Unified constructorField mapping and emission finalized |
+
+The text pipeline no longer depends on runtime attribute discovery. `textShape.text` is a confirmed Cavalry visual binding, mapped deterministically to the `text` attribute and applied through the compiler-generated runtime path.
+
+---
+
 ## A. RUNTIME FACTS (VERIFIED)
 
 > Only facts directly observable in code. No interpretation.
@@ -110,7 +124,8 @@ All files under `src/compiler/`. The full pipeline (`parseIntent → buildProgra
 | `finalizeProgram.ts` | Hard runtime boundary: throws on `existingLayerByName` and non-canonical `compilerOwned` types |
 | `cavalryGenerator.ts` | `generate(plan)` — `CompiledPlan → AuthorizedExecution { code: CompiledJs, token: TrustToken }`; mints `TrustToken` via `mintTrustToken()`; throws `GeneratorError` on contract violations. Only authorized JS emission site. |
 | `nodeRegistry.ts` | `CANONICAL_NODE_TYPES`, `isCanonicalNodeType()`, `ALIAS_MAP`, `canonicalize()` |
-| `sceneIdentityResolver.ts` | `emitReconciliation()` — generates JS reconciliation block for `compilerOwned` targets |
+| `sceneIdentityResolver.ts` | `emitReconciliation()` — generates JS reconciliation block for `compilerOwned` targets; resolves layer identity, maps constructorFields, and emits post-resolution `api.set()` |
+| `constructorFieldMapping.ts` | `resolveConstructorAttr()` — maps semantic constructor fields to confirmed Cavalry attribute paths (`textShape.text → text`) |
 | `mcIdGenerator.ts` | `generateMcId(layerType)` — format `MC_<type>_<base36-ts>_<base36-random>` |
 | `intentParser.ts` | NL string → `MotionProgram`; calls `resolveVocabulary()` first |
 | `semanticResolver.ts` | `resolveSemantics()`, `resolveSemanticsWithTrace()` — splits raw input into `constructorFields`, `runtimeAttributes`, `motionIntent` |
@@ -121,6 +136,54 @@ All files under `src/compiler/`. The full pipeline (`parseIntent → buildProgra
 | `presets/` | `bounce_in`, `fade_in`, `slide_left`, `scale_pop` |
 
 **Confirmed by live execution (2026-05-08):** Compiler output manually passed to `cavalry_run_script` produced a correct bouncing animation.
+
+---
+
+### A3.1. Text ConstructorField Pipeline (Stable Runtime Path)
+
+**System behavior:** `text` constructorField is fully supported end-to-end for `textShape`. Text rendering is deterministic across both layer creation and layer reuse. There are no branching differences between create/reuse paths: the layer is resolved first, then constructorFields are applied once.
+
+Stable runtime path:
+
+```
+cavalry_run_motion(text)
+  → buildProgramFromIntent
+    → semanticResolver (constructorFields extraction)
+      → MotionTarget (compilerOwned)
+        → sceneIdentityResolver
+          → mapConstructorFields
+          → emitConstructorFieldLines
+            → api.set(layer, { text: value })
+```
+
+Final pipeline definition:
+
+- Semantic layer extracts `constructorFields`.
+- Compiler attaches them to `MotionTarget.compilerOwned`.
+- Scene resolver resolves layer identity through create or reuse reconciliation.
+- ConstructorFields are mapped once via `mapConstructorFields`.
+- Emission layer produces a single consolidated `api.set` call.
+- Cavalry renders text immediately on canvas.
+
+Confirmed attribute binding:
+
+```
+textShape.text → Cavalry visual text layer content
+```
+
+`api.set` for constructorFields is emitted once per execution after layer resolution. The same emission path applies whether the layer is newly created or reused.
+
+Verified runtime (2026-05-15):
+
+```
+cavalry_run_motion({ text: "TESTING" })
+
+→ Layer: MC__textshape
+→ Canvas: "TESTING" rendered correctly
+→ Animation: opacity 0 → 100
+→ Re-run: identical output (idempotent behavior confirmed)
+→ No fallback to default "Cavalry"
+```
 
 ---
 
@@ -152,7 +215,7 @@ Source: `src/schema/attributeRegistry.ts` — `ATTRIBUTE_REGISTRY["textShape"]`.
 | `fontSize` | number | 2026-05-08 |
 | `fill.color` | hex string | 2026-05-08 |
 | `fontColor` | hex string | 2026-05-08 — correct text color path (not `color`, `textColor`, `fill`, `style.fill`) |
-| `text` | string | 2026-05-08 |
+| `text` | string | 2026-05-08; runtime visual binding confirmed 2026-05-15 |
 
 **Negatively confirmed** (probed ≥2 times, consistently failed): `color`, `textColor`, `fill`, `style.fill`, `appearance.color`, `name`
 
@@ -208,6 +271,8 @@ Implemented in `src/compiler/sceneIdentityResolver.ts` and `src/compiler/mcIdGen
 | `validator.test.ts` | 4 | `validateClip()`: canonical passes, non-canonical rejects, alias rejects, no mutation |
 | `nodeRegistry.test.ts` | 6 | `canonicalize()`, `isCanonicalNodeType()`: determinism, null on unknown, identity |
 | `node-registry-guard.test.ts` | 17 | Full pipeline: canonical, alias, unknown input — all three stages |
+| `constructor-fields.test.ts` | 6 | CF1-CF5 + CF-PIPELINE: text constructorField propagation, post-resolution emission, create/reuse parity |
+| `constructor-field-mapping.test.ts` | 3 | CMAP: `textShape.text` confirmed mapping, unknown layer rejection, invalid mapping guard |
 
 **CI guard tests** — `src/__tests__/` (added in v1.2.1):
 
@@ -219,7 +284,9 @@ Implemented in `src/compiler/sceneIdentityResolver.ts` and `src/compiler/mcIdGen
 | `nl-firewall.test.ts` | 8 | G4: unrecognised NL returns "Cavalry was NOT contacted"; valid presets reach execution layer; `handleRunMotion` never calls `sendRawToCavalry` |
 | `trust-token.test.ts` | 14 | G5: unknown sessionId rejected; single-use enforcement; copy-literal-after-consumption invalid; invalid issuer throws; successful path; frozen token |
 
-**Test runner:** `npm test` → `tsx --test "src/**/*.test.ts"`. **70 tests passing as of 2026-05-15.**
+**Test runner:** `npm test` → `tsx --test "src/**/*.test.ts"`. **79/79 tests passing as of 2026-05-15.**
+
+**Text constructorField validation:** CF1-CF5 + CF-PIPELINE validated; CMAP tests passing; constructorField emission verified deterministic.
 
 ---
 
@@ -279,7 +346,7 @@ Implemented in `src/compiler/sceneIdentityResolver.ts` and `src/compiler/mcIdGen
 
 **`mintTrustToken` import enforcement:** exactly one non-test, non-definition-file import → `src/compiler/cavalryGenerator.ts`. CI fails on any additional import or barrel re-export.
 
-**Total:** 70 tests passing as of 2026-05-15.
+**Total:** 79/79 tests passing as of 2026-05-15. CF1-CF5 + CF-PIPELINE validated, CMAP tests passing, and constructorField emission verified deterministic.
 
 ---
 
@@ -304,6 +371,9 @@ These invariants are **enforced** — each maps to a runtime constraint, a brand
 | I7 | **Validator Purity.** Validation stages reject or report; they do not mutate IR, inject defaults, normalize attributes, infer intent, or synthesize behavior. | `validateClip()` no-mutation test (C2-2); structural enforcement via `CompiledPlan` brand |
 | I8 | **Generator Purity.** `cavalryGenerator` is a pure lowering stage from validated `CompiledPlan` → `CompiledJs`. No reinterpretation, no fallback, no upstream mutation. | `CompiledJs` brand; `generate()` accepts only `CompiledPlan` |
 | I9 | **Tool Registry Bootstrap.** Tool registry is constructed in a single deterministic `registerTools(server)` call. No module-scope, lazy, or runtime tool mutation. | G2 AST walk; idempotency guard; ESM entry-point guard |
+| CF-T1 | **Text ConstructorFields Bind Deterministically.** ConstructorFields for `textShape` are fully deterministic and bind directly to Cavalry visual state via the `text` attribute. | `constructor-field-mapping.test.ts`; 2026-05-15 runtime verification |
+| CF-T2 | **Text ConstructorFields Apply on Create and Reuse.** ConstructorFields are applied on both layer creation and layer reuse with no divergence between reconciliation paths. | `constructor-fields.test.ts` CF4-CF5; post-resolution emission in `sceneIdentityResolver.ts` |
+| CF-T3 | **Single ConstructorField Emission.** `api.set` for constructorFields is emitted exactly once per execution per resolved layer. | `constructor-fields.test.ts` CF4-CF5 + CF-PIPELINE; `emitConstructorFieldLines()` |
 
 ---
 
@@ -329,20 +399,20 @@ The production surface (`cavalry_ping` + `cavalry_run_motion`) has no direct raw
 
 Unknown input keys are dropped, not guessed. No inference, no fuzzy matching.
 
-**Reality:** `semanticResolver` is implemented and functional. It is not wired into `intentParser` or the MCP runtime. It is a standalone module callable by application code.
+**Reality:** `semanticResolver` is implemented and functional. For the `cavalry_run_motion` text path, `buildProgramFromIntent` consumes semantic `constructorFields` and attaches them to `MotionTarget.compilerOwned`. `sceneIdentityResolver` then resolves layer identity, maps constructorFields through `mapConstructorFields`, and emits one post-resolution `api.set` through `emitConstructorFieldLines`. This is the stable runtime path for `textShape.text`.
 
 ---
 
 ### B3. Probe-Sync Learning Loop (intent)
 
-**Intent:** The probe and sync system should detect registry drift without modifying the compiler's input. The loop is:
+**Intent:** The probe and sync system should detect registry drift without modifying the compiler's input. It remains available for future attribute discovery outside the confirmed `textShape.text` constructorField pipeline. The loop is:
 
 1. `probeAttribute()` / `sweepNodeType()` — executes against live Cavalry, returns three-state result
 2. `computeDiff()` / `runSyncSession()` — accumulates ≥2 runs, produces diff proposal
 3. Human review — inspects `addedCandidates` / `removedCandidates` and manually updates `attributeRegistry.ts`
 4. Updated registry is consumed by `semanticResolver.isApprovedAttribute()` in the next compile
 
-**Reality:** The probe and sync modules are implemented. They are not wired to any automatic trigger or scheduled job. Running a probe sweep requires manually calling `sweepNodeType()` or `probeAttribute()` in application code and passing the result to `runSyncSession()`.
+**Reality:** The probe and sync modules are implemented. They are not wired to any automatic trigger or scheduled job. Running a probe sweep requires manually calling `sweepNodeType()` or `probeAttribute()` in application code and passing the result to `runSyncSession()`. Probing is not required for `textShape.text` rendering validation; that binding is already confirmed and production-stable.
 
 ---
 
@@ -517,8 +587,8 @@ The `CompiledJs` brand and `TrustToken` registry are designed to be forward-comp
 **D3. HTTP 200 does not mean visual correctness.**
 Stallion returns HTTP 200 for any executed script, including ones with wrong attribute paths, nonsensical values, or silently rejected API calls. The MCP returns `"Script executed successfully."` when Stallion returns an empty body. There is no visual feedback loop.
 
-**D4. Attribute validation depends on registry completeness.**
-`isApprovedAttribute()` returns `false` for any attribute not in `ATTRIBUTE_REGISTRY`. This is a safety boundary but not a complete truth: an attribute absent from the registry may still be valid in Cavalry. The registry covers only `textShape` as of 2026-05-08.
+**D4. Attribute validation depends on registry completeness outside confirmed constructorFields.**
+`isApprovedAttribute()` returns `false` for any runtime attribute not in `ATTRIBUTE_REGISTRY`. This is a safety boundary but not a complete truth: an attribute absent from the registry may still be valid in Cavalry. The `textShape.text` constructorField path is confirmed and does not depend on runtime attribute discovery. Other runtime attributes and future layer types still depend on registry completeness.
 
 **D5. Probe system is read-only and asynchronous. It has no automatic trigger.**
 There is no scheduled probe sweep, no hook that runs probes on startup, and no mechanism that automatically updates the registry. The probe-sync loop only runs when manually invoked by application code.
@@ -532,8 +602,8 @@ The DSL accepts `existingLayerByName` (the validator passes it if `name` is a no
 **D8. `MC_DUPLICATE` error halts the entire script.**
 If two layers share the same `MC__` name or `userData.mcId`, the reconciliation `throw` stops the script at that target. All animation ops for subsequent targets do not execute.
 
-**D9. Registry approved date is frozen.**
-`ATTRIBUTE_REGISTRY["textShape"].approvedAt = "2026-05-08"`. No subsequent live probe has been run. The registry may have drifted from the current Cavalry runtime. Probe candidates `stroke.color`, `stroke.width`, `anchor.x`, `anchor.y` remain unverified.
+**D9. Registry approved date is historical; text constructorField binding is current.**
+`ATTRIBUTE_REGISTRY["textShape"].approvedAt = "2026-05-08"`. `textShape.text` was additionally confirmed through runtime visual validation on 2026-05-15 and is production-stable for text rendering. Probe candidates `stroke.color`, `stroke.width`, `anchor.x`, `anchor.y` remain unverified.
 
 **D10. Only one canonical node type exists.**
 `CANONICAL_NODE_TYPES = ["textShape"]`. No other layer type has a verified attribute registry or a confirmed `api.create()` call. All other Cavalry layer types are unknown to the compiler pipeline.
@@ -556,6 +626,8 @@ cavalry_run_motion → parseIntent → buildProgramFromIntent → compile → ge
 A `TrustToken` minted by `cavalryGenerator.generate()` is required for execution. Any compiler stage failure returns an error before Stallion is contacted.
 
 Supported NL presets: `fade_in`, `bounce_in`, `slide_left`, `scale_pop`.
+
+For `textShape` rendering, the compiler also supports `text` constructorField propagation through `buildProgramFromIntent → MotionTarget.compilerOwned → sceneIdentityResolver → api.set(layer, { text: value })`. This path is deterministic for both create and reuse reconciliation.
 
 ### BYPASS PATH (debug only, env-gated)
 
@@ -604,6 +676,9 @@ Accepts `rawJs: string`. No compiler validation, no `TrustToken`, no attribute r
 | G4: handleRunMotion never calls sendRawToCavalry | `src/index.ts` | `handleRunMotion()` | `nl-firewall.test.ts` |
 | G5: TrustToken unknown sessionId rejected | `runtime/trustToken.ts` | `consumeTrustToken()` | `trust-token.test.ts` |
 | G5: TrustToken single-use enforcement | `runtime/trustToken.ts` | `consumeTrustToken()` | `trust-token.test.ts` |
+| CF-T1: `textShape.text` deterministic visual binding | `constructorFieldMapping.ts` | `resolveConstructorAttr()` | `constructor-field-mapping.test.ts` |
+| CF-T2: constructorFields apply on create and reuse | `sceneIdentityResolver.ts` | `emitReconciliation()` | `constructor-fields.test.ts` CF4-CF5 |
+| CF-T3: single constructorField `api.set` per resolved layer | `sceneIdentityResolver.ts` | `emitConstructorFieldLines()` | `constructor-fields.test.ts` CF4-CF5 + CF-PIPELINE |
 | C5-1: isApprovedAttribute lookup only | `attributeRegistry.ts` | `isApprovedAttribute()` | **MISSING TEST COVERAGE** |
 | C5-2: ATTRIBUTE_REGISTRY no auto-update | `attributeRegistry.ts` | `ATTRIBUTE_REGISTRY` | **UNVERIFIABLE** |
 | C5-3: isNegativelyConfirmed not used in validation | `attributeRegistry.ts` | `isNegativelyConfirmed()` | **UNVERIFIABLE** |
@@ -629,4 +704,4 @@ All value-returning tools depended on `api.log()` output flowing back through St
 
 ---
 
-_Last updated: 2026-05-15 | Branch: motion-runtime | v1.2.1 — compiler-first runtime hardening complete (Plan v1.2.1). 70 tests passing. D1 resolved. §B0 invariants enforced._
+_Last updated: 2026-05-15 | Branch: motion-runtime | v1.2.1 — text-on-canvas compiler pipeline production-stable. 79/79 tests passing. D1 resolved. §B0 invariants and CF-T1-CF-T3 text constructorField invariants enforced/verified._
