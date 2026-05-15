@@ -132,5 +132,5 @@ export function buildProgramFromIntent(
         params,
       },
     ],
-  };
+  } as unknown as MotionProgram;
 }

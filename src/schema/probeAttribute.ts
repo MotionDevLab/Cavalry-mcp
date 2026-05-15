@@ -46,7 +46,7 @@
  *   Any response not containing a recognised marker is treated as INVALID.
  */
 
-import { sendToCavalry } from "../stallion.js";
+import { sendRawToCavalry } from "../stallion.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -367,7 +367,7 @@ export async function probeAttribute(
 
   try {
     const script = buildProbeScript(nodeType, attribute, sentinelType);
-    response = await sendToCavalry(script, "script");
+    response = await sendRawToCavalry(script, "script");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return {

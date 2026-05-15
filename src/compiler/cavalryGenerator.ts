@@ -23,6 +23,19 @@ import type {
 } from "./motionDSL.js";
 import { emitReconciliation } from "./sceneIdentityResolver.js";
 import { isCanonicalNodeType } from "./nodeRegistry.js";
+import {
+  mintTrustToken,
+  type AuthorizedExecution,
+  type TrustToken,
+} from "../runtime/trustToken.js";
+
+/**
+ * Branded type for compiler-generated JavaScript.
+ * Only one sanctioned cast site: the final return of generate() below.
+ */
+export type CompiledJs = string & { readonly __compiledJs: unique symbol };
+
+export type { AuthorizedExecution, TrustToken };
 
 export class GeneratorError extends Error {
   constructor(message: string) {
@@ -145,7 +158,7 @@ function emitAttrMap(attrs: Record<string, number>): string {
  *   api.keyframe(__t0, <frame>, { ... });
  *   api.magicEasing(__t0, "<attr>", <frame>, "<easing>");
  */
-export function generate(plan: CompiledPlan): string {
+export function generate(plan: CompiledPlan): AuthorizedExecution {
   const lines: string[] = [];
 
   // Header — purely informational; Cavalry ignores comments at runtime.
@@ -212,5 +225,6 @@ export function generate(plan: CompiledPlan): string {
     );
   }
 
-  return lines.join("\n").trimEnd() + "\n";
+  const code = (lines.join("\n").trimEnd() + "\n") as CompiledJs;
+  return Object.freeze({ code, token: mintTrustToken() });
 }

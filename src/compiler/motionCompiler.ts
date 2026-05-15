@@ -83,5 +83,5 @@ export function compile(program: MotionProgram): CompiledPlan {
   validateOps(ops);
 
   // 5. Return deterministic compiled plan
-  return { targets: resolved, ops };
+  return { targets: resolved, ops } as unknown as CompiledPlan;
 }

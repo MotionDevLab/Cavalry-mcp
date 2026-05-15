@@ -54,7 +54,7 @@ function buildProgram(
         timing: { startFrame: 0, durationFrames: 30 },
       },
     ],
-  };
+  } as unknown as MotionProgram;
 }
 
 /**
@@ -96,10 +96,10 @@ test('"textShape" compiles and generates without error', () => {
 
   const program = buildProgram("clip_textShape", "target_text_shape", canonical);
   const plan = compile(program);
-  const output = generate(plan);
+  const exec = generate(plan);
 
-  assert.ok(typeof output === "string" && output.length > 0);
-  assert.ok(output.includes('api.create("textShape"'));
+  assert.ok(typeof exec.code === "string" && exec.code.length > 0);
+  assert.ok(exec.code.includes('api.create("textShape"'));
 });
 
 // ---------------------------------------------------------------------------
@@ -127,12 +127,12 @@ test('"basicText" compiles and generates after boundary resolution', () => {
 
   const program = buildProgram("clip_basicText", "target_basic_text", canonical);
   const plan = compile(program);
-  const output = generate(plan);
+  const exec = generate(plan);
 
-  assert.ok(typeof output === "string" && output.length > 0);
+  assert.ok(typeof exec.code === "string" && exec.code.length > 0);
   // generator emits "textShape" — the alias never reaches generated code
-  assert.ok(output.includes('api.create("textShape"'));
-  assert.ok(!output.includes("basicText"));
+  assert.ok(exec.code.includes('api.create("textShape"'));
+  assert.ok(!exec.code.includes("basicText"));
 });
 
 // ---------------------------------------------------------------------------
@@ -245,9 +245,9 @@ test("pipeline: alias input resolves at stage 1; stages 2 and 3 see only canonic
   const plan = compile(program);
 
   // Stage 3: generator output contains canonical type, never the alias
-  const output = generate(plan);
-  assert.ok(!output.includes("basicText"), "stage 3: alias must not appear in generated JS");
-  assert.ok(output.includes("textShape"), "stage 3: canonical type must appear in generated JS");
+  const exec = generate(plan);
+  assert.ok(!exec.code.includes("basicText"), "stage 3: alias must not appear in generated JS");
+  assert.ok(exec.code.includes("textShape"), "stage 3: canonical type must appear in generated JS");
 });
 
 test("pipeline: unknown input stopped at stage 1; stages 2 and 3 never invoked", () => {

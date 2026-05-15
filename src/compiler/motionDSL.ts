@@ -164,12 +164,20 @@ export interface MotionComposition {
 // Top-level program
 // ---------------------------------------------------------------------------
 
-export interface MotionProgram {
+interface MotionProgramShape {
   /** DSL schema version. Bump on breaking changes. */
   version: "1";
   composition?: MotionComposition;
   clips: MotionClip[];
 }
+
+/**
+ * Branded IR type. Only one sanctioned cast site exists:
+ * the final return of buildProgramFromIntent() in buildProgram.ts.
+ */
+export type MotionProgram = MotionProgramShape & {
+  readonly __motionProgram: unique symbol;
+};
 
 // ---------------------------------------------------------------------------
 // MotionOp — lowest-level deterministic instruction
@@ -214,7 +222,7 @@ export interface ResolvedTarget {
   target: MotionTarget;
 }
 
-export interface CompiledPlan {
+interface CompiledPlanShape {
   /**
    * Targets discovered while expanding clips. Generator uses this to emit
    * any required layer-id resolution preamble.
@@ -222,6 +230,14 @@ export interface CompiledPlan {
   targets: ResolvedTarget[];
   ops: MotionOp[];
 }
+
+/**
+ * Branded IR type. Only one sanctioned cast site exists:
+ * the final return of compile() in motionCompiler.ts.
+ */
+export type CompiledPlan = CompiledPlanShape & {
+  readonly __compiledPlan: unique symbol;
+};
 
 // ---------------------------------------------------------------------------
 // Intent parser output

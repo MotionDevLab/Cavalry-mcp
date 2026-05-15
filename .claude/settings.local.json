@@ -15,7 +15,14 @@
       "Bash(awk '{print \"  \" $0}')",
       "Bash(npm test *)",
       "Bash(node --test dist/runtime-tests/cavalryRuntimeHarness.test.js)",
-      "Bash(node --test dist/compiler/__tests__/dsl-contract.test.js dist/compiler/__tests__/validator.test.js dist/compiler/__tests__/generator-contract.test.js dist/compiler/__tests__/node-registry-guard.test.js dist/compiler/__tests__/nodeRegistry.test.js)"
+      "Bash(node --test dist/compiler/__tests__/dsl-contract.test.js dist/compiler/__tests__/validator.test.js dist/compiler/__tests__/generator-contract.test.js dist/compiler/__tests__/node-registry-guard.test.js dist/compiler/__tests__/nodeRegistry.test.js)",
+      "Bash(node -e \"import\\('typescript'\\).then\\(ts => console.log\\(ts.default.version\\)\\)\")",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(node --import tsx/esm --test src/__tests__/nl-firewall.test.ts)",
+      "Bash(node --experimental-strip-types --test src/__tests__/nl-firewall.test.ts)",
+      "Read(//tmp/**)",
+      "Bash(tee /tmp/guard-tests.txt)",
+      "mcp__cavalry__cavalry_run_motion"
     ]
   }
 }

@@ -21,7 +21,7 @@ import type { CanonicalNodeType } from "../nodeRegistry.js";
 // ---------------------------------------------------------------------------
 
 test("generate() accepts valid CompiledPlan", () => {
-  const plan: CompiledPlan = {
+  const plan = {
     targets: [
       {
         ref: "t0",
@@ -32,7 +32,7 @@ test("generate() accepts valid CompiledPlan", () => {
       },
     ],
     ops: [],
-  };
+  } as unknown as CompiledPlan;
 
   assert.doesNotThrow(() => generate(plan));
 });
@@ -42,7 +42,7 @@ test("generate() accepts valid CompiledPlan", () => {
 // ---------------------------------------------------------------------------
 
 test("generate() throws GeneratorError for invalid compiler state", () => {
-  const plan: CompiledPlan = {
+  const plan = {
     targets: [
       {
         ref: "t0",
@@ -54,7 +54,7 @@ test("generate() throws GeneratorError for invalid compiler state", () => {
       },
     ],
     ops: [],
-  };
+  } as unknown as CompiledPlan;
 
   assert.throws(() => generate(plan), GeneratorError);
 });
@@ -64,7 +64,7 @@ test("generate() throws GeneratorError for invalid compiler state", () => {
 // ---------------------------------------------------------------------------
 
 test("generator only throws GeneratorError on contract violation", () => {
-  const plan: CompiledPlan = {
+  const plan = {
     targets: [
       {
         ref: "t0",
@@ -76,7 +76,7 @@ test("generator only throws GeneratorError on contract violation", () => {
       },
     ],
     ops: [],
-  };
+  } as unknown as CompiledPlan;
 
   try {
     generate(plan);

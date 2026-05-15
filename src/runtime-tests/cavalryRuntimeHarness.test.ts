@@ -5,7 +5,7 @@ import { generate, GeneratorError } from "../compiler/cavalryGenerator.js";
 import { validateClip, MotionValidationError } from "../compiler/validators.js";
 import { canonicalize, isCanonicalNodeType } from "../compiler/nodeRegistry.js";
 
-import type { MotionClip } from "../compiler/motionDSL.js";
+import type { CompiledPlan, MotionClip } from "../compiler/motionDSL.js";
 
 // -----------------------------------------------------------------------------
 // FIXTURE: valid compilerOwned clip
@@ -72,12 +72,12 @@ test("runtime: generate compiles valid compilerOwned clip", () => {
       },
     ],
     ops: [],
-  };
+  } as unknown as CompiledPlan;
 
-  const output = generate(plan);
+  const exec = generate(plan);
 
-  assert.strictEqual(typeof output, "string");
-  assert.ok(output.length > 0);
+  assert.strictEqual(typeof exec.code, "string");
+  assert.ok(exec.code.length > 0);
 });
 
 // -----------------------------------------------------------------------------
@@ -93,7 +93,7 @@ test("runtime: generator throws on invalid compiler state", () => {
       },
     ],
     ops: [],
-  };
+  } as unknown as CompiledPlan;
 
   assert.throws(() => generate(plan), GeneratorError);
 });
